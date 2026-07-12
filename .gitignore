@@ -1,0 +1,6 @@
+data/All_Ride_Telemetry.csv
+
+__pycache__/
+*.pyc
+.venv/
+.env

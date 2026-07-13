@@ -10,10 +10,6 @@ from sklearn.model_selection import cross_val_predict
 
 df = pd.read_csv("data/final_features.csv")
 
-# -----------------------------
-# MODEL
-# -----------------------------
-
 df["Cadence Ratio"] = (df["Average Cadence"] / (df["cadence_sd"] + 1e-6))
 df["Heart Ratio"] = (df["Average Heart Rate"] / (df["HR SD"] + 1e-6))
 df["ELE Ratio"] = (df["Elevation Gain"] / (df["ELE SD"] + 1e-6))
@@ -77,12 +73,6 @@ scores = cross_val_score(
 
 print("CV Scores :", scores)
 print("Mean CV Score :", scores.mean())
-
-
-
-# -----------------------------
-# FEATURE IMPORTANCE
-# -----------------------------
 
 importance = model.feature_importances_
 

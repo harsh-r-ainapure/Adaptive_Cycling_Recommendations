@@ -79,11 +79,7 @@ print(
     model.score(X_test, Y_test)
 )
 
-
-
-# -----------------------------
 # FEATURE IMPORTANCE
-# -----------------------------
 
 importance = model.feature_importances_
 

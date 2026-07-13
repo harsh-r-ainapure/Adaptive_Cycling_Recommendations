@@ -5,10 +5,7 @@ from sklearn.metrics import mean_absolute_error
 import xgboost as xg
 import numpy as np
 
-
-# -----------------------------
 # LOAD DATA
-# -----------------------------
 
 df = pd.read_csv(
     "data/Cleaned_testing_data.csv",
@@ -30,9 +27,8 @@ print(df_fit["power"].describe())
 print(
     (df_fit["power"] == 0).sum()
 )
-# -----------------------------
+
 # PREP FIT METADATA
-# -----------------------------
 
 fit_meta["Date"] = pd.to_datetime(
     fit_meta["Date"]
@@ -46,10 +42,7 @@ fit_meta["Distance"] = (
     fit_meta["Distance"] / 1000
 )
 
-
-# -----------------------------
 # PREP ORIGINAL DATASET
-# -----------------------------
 
 df = df[
     df["Activity ID"] != 790
@@ -71,13 +64,7 @@ df["Activity Date"] = (
     df["Activity Date"].dt.date
 )
 
-# -----------------------------
-# CREATE TRUE FIT ↔ RIDE MAPPING
-# -----------------------------
-
-# -----------------------------
-# CREATE TRUE FIT ↔ RIDE MAPPING
-# -----------------------------
+# CREATE TRUE FIT TO RIDE MAPPING
 
 fit_meta = fit_meta.sort_values(
     "Date"
@@ -92,7 +79,7 @@ mapping = {
     "Activity ID": []
 }
 
-# ---------- Prevent duplicate assignments ----------
+#  Prevent duplicate assignments 
 used_activity_ids = set()
 
 for i, row in fit_meta.iterrows():
@@ -102,11 +89,11 @@ for i, row in fit_meta.iterrows():
 
     for j, roow in df.iterrows():
 
-        # ---------- Skip already used rides ----------
+        #  Skip already used rides 
         if roow["Activity ID"] in used_activity_ids:
             continue
 
-        # ---------- Match same date ----------
+        #  Match same date
         if row["Date"] == roow["Activity Date"]:
 
             distance_error = abs(
@@ -115,16 +102,16 @@ for i, row in fit_meta.iterrows():
                 roow["Distance"]
             )
 
-            # ---------- Accept only close distances ----------
+            #  Accept only close distances 
             if distance_error <= 1:
 
-                # ---------- Keep BEST distance match ----------
+                
                 if distance_error < best_error:
 
                     best_error = distance_error
                     best_match = roow["Activity ID"]
 
-    # ---------- Save best match ----------
+    # Save best match
     if best_match is not None:
 
         mapping["ride_id"].append(
@@ -141,9 +128,7 @@ for i, row in fit_meta.iterrows():
 
 mapping_df = pd.DataFrame(mapping)
 
-# -----------------------------
 # MERGE TRUE IDS INTO TELEMETRY
-# -----------------------------
 
 df_fit = df_fit.merge(
 
@@ -167,14 +152,14 @@ power_check = (
     .reset_index()
 )
 
-# ---------- Percentage with real power ----------
+# Percentage with real power
 power_check["Power_Availability_Percent"] = (
     power_check["Nonzero_Power_Seconds"]
     /
     (power_check["Total_Seconds"] + 1e-6)
 ) * 100
 
-# ---------- Add ride dates ----------
+#  Add ride dates 
 power_check = power_check.merge(
     df[
         ["Activity ID", "Activity Date"]
@@ -200,12 +185,7 @@ df = df.sort_values(
     "Activity Date"
 ).reset_index(drop=True)
 
-
-
-# -----------------------------
 # FEATURE ENGINEERING
-# -----------------------------
-
 
 df["VAM"] = (
 
@@ -227,10 +207,7 @@ df["Rel Speed"] = (
     df["Average Speed"]
 )
 
-
-# -----------------------------
 # HR SD FEATURE
-# -----------------------------
 
 hr_sd = (
 
@@ -307,7 +284,7 @@ df_fit["Gradient"] = (
     (df_fit["DIST_DIFF"] + 1e-6)
 ) * 100
 
-# ---------- Remove infinities ----------
+#  Remove infinities 
 df_fit["Gradient"] = df_fit["Gradient"].replace(
     [np.inf, -np.inf],
     np.nan
@@ -327,7 +304,7 @@ gradient_feature = (
     .reset_index()
 )
 
-# ---------- Merge into main dataframe ----------
+# Merge into main dataframe 
 df = df.merge(
     gradient_feature,
     on="Activity ID",
@@ -392,9 +369,7 @@ df = df.merge(
     how="left"
 )
 
-# =====================================================
 # WORKING HR
-# =====================================================
 
 working_hr = (
     df_fit[
@@ -409,9 +384,8 @@ working_hr = (
     .reset_index(name="Working_HR")
 )
 
-# =====================================================
+
 # ROLLING / COASTING FEATURES
-# =====================================================
 
 rolling_mask = (
     (df_fit["cadence"] == 0)
@@ -419,7 +393,7 @@ rolling_mask = (
     (df_fit["enhanced_speed"] > 3)
 )
 
-# ---------- Rolling seconds ----------
+#  Rolling seconds
 rolling_seconds = (
     df_fit[rolling_mask]
     .groupby("Activity ID")
@@ -427,7 +401,7 @@ rolling_seconds = (
     .reset_index(name="Rolling_Seconds")
 )
 
-# ---------- Total telemetry seconds ----------
+#  Total telemetry seconds 
 total_seconds = (
     df_fit
     .groupby("Activity ID")
@@ -435,23 +409,21 @@ total_seconds = (
     .reset_index(name="Total_Seconds")
 )
 
-# ---------- Merge totals ----------
+#  Merge totals 
 rolling_features = rolling_seconds.merge(
     total_seconds,
     on="Activity ID",
     how="left"
 )
 
-# ---------- Rolling percentage ----------
+#  Rolling percentage 
 rolling_features["Rolling_Percent"] = (
     rolling_features["Rolling_Seconds"]
     /
     (rolling_features["Total_Seconds"] + 1e-6)
 ) * 100
 
-# =====================================================
-# HR RECOVERY SLOPE DURING COASTING
-# =====================================================
+
 
 rolling_blocks = df_fit[rolling_mask].copy()
 
@@ -470,16 +442,12 @@ hr_recovery_slope = (
     )
     .reset_index(name="HR_Recovery_Slope")
 )
-# ---------- Merge slope ----------
+# Merge slope
 rolling_features = rolling_features.merge(
     hr_recovery_slope,
     on="Activity ID",
     how="left"
 )
-
-# =====================================================
-# KEEP FINAL ROLLING FEATURES
-# =====================================================
 
 rolling_features = rolling_features[
     [
@@ -489,14 +457,14 @@ rolling_features = rolling_features[
     ]
 ]
 
-# ---------- Merge into main dataframe ----------
+#  Merge into main dataframe 
 df = df.merge(
     rolling_features,
     on="Activity ID",
     how="left"
 )
 
-# ---------- Fill missing ----------
+
 df["Rolling_Percent"] = (
     df["Rolling_Percent"]
     .fillna(0)
@@ -509,17 +477,13 @@ df["HR_Recovery_Slope"] = (
     )
 )
 
-# =====================================================
-# STOPPING / REST FEATURES
-# =====================================================
-
 stopping_mask = (
     (df_fit["cadence"] == 0)
     &
     (df_fit["enhanced_speed"] < 0.5)
 )
 
-# ---------- Stopping seconds ----------
+#  Stopping seconds 
 stopping_seconds = (
     df_fit[stopping_mask]
     .groupby("Activity ID")
@@ -527,23 +491,19 @@ stopping_seconds = (
     .reset_index(name="Stopping_Seconds")
 )
 
-# ---------- Merge totals ----------
+#  Merge totals 
 stopping_features = stopping_seconds.merge(
     total_seconds,
     on="Activity ID",
     how="left"
 )
 
-# ---------- Stopping percentage ----------
+# Stopping percentage 
 stopping_features["Stopping_Percent"] = (
     stopping_features["Stopping_Seconds"]
     /
     (stopping_features["Total_Seconds"] + 1e-6)
 ) * 100
-
-# =====================================================
-# HR RECOVERY DURING STOPPING
-# =====================================================
 
 stopping_hr = (
     df_fit[stopping_mask]
@@ -552,7 +512,7 @@ stopping_hr = (
     .reset_index(name="Stopping_HR")
 )
 
-# ---------- Merge HRs ----------
+# Merge HRs 
 stopping_features = stopping_features.merge(
     stopping_hr,
     on="Activity ID",
@@ -565,7 +525,7 @@ stopping_features = stopping_features.merge(
     how="left"
 )
 
-# ---------- HR recovery percentage ----------
+# HR recovery percentage 
 stopping_features["Stop_HR_Recovery_Percent"] = (
     (
         stopping_features["Working_HR"]
@@ -576,9 +536,6 @@ stopping_features["Stop_HR_Recovery_Percent"] = (
     (stopping_features["Working_HR"] + 1e-6)
 ) * 100
 
-# =====================================================
-# KEEP FINAL STOPPING FEATURES
-# =====================================================
 
 stopping_features = stopping_features[
     [
@@ -588,14 +545,12 @@ stopping_features = stopping_features[
     ]
 ]
 
-# ---------- Merge into main dataframe ----------
 df = df.merge(
     stopping_features,
     on="Activity ID",
     how="left"
 )
 
-# ---------- Fill missing ----------
 df["Stopping_Percent"] = (
     df["Stopping_Percent"]
     .fillna(0)
@@ -608,11 +563,8 @@ df["Stop_HR_Recovery_Percent"] = (
     )
 )
 
-# =====================================================
-# DYNAMIC HR CALENDAR BASELINE & PHYSIOLOGICAL ZONES
-# =====================================================
 
-# CRUCIAL FIX: Convert 'Activity Date' back to a true pandas datetime object
+# Convert 'Activity Date' back to a true pandas datetime object
 # otherwise rolling('56D') expects an integer row count and throws an error
 df["Activity Date"] = pd.to_datetime(df["Activity Date"])
 
@@ -660,17 +612,10 @@ power_zone = (
 df = df.merge(recovery_zone, on="Activity ID", how="left").fillna({"Recovery_Zone_Percent": 0})
 df = df.merge(power_zone, on="Activity ID", how="left").fillna({"Power_Zone_Percent": 0})
 
-
- # =====================================================
-# CLEANUP FINAL MERGED FEATURE NULLS
-# =====================================================
 df["Gradient"] = df["Gradient"].fillna(0)
 df["ELE SD"] = df["ELE SD"].fillna(0)
 df["Cadence_Drift"] = df["Cadence_Drift"].fillna(df["Cadence_Drift"].median())                                     
 
-# -----------------------------
-# CLEANING
-# -----------------------------
 df = df.replace(
     [np.inf, -np.inf],
     np.nan

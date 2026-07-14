@@ -60,7 +60,7 @@ if selected_page == "Home":
 
     @st.cache_data
     def load_data():
-        df = pd.read_csv('../data/final_features.csv')
+        df = pd.read_csv('data/final_features.csv')
         df['Activity Date'] = pd.to_datetime(df['Activity Date'])
         df = df.sort_values(by='Activity Date')
         return df
@@ -93,7 +93,7 @@ if selected_page == "Home":
     st.markdown("A visual breakdown of how your capacity deviates from the baseline over time.")
 
     try:
-        df = pd.read_csv('../data/final_features.csv')
+        df = pd.read_csv('data/final_features.csv')
         df['Activity Date'] = pd.to_datetime(df['Activity Date'])
         latest_date = df['Activity Date'].max()
         six_months_ago = latest_date - timedelta(days=180)
@@ -117,7 +117,7 @@ if selected_page == "Home":
         )
         st.plotly_chart(fig2, use_container_width=True)
     except FileNotFoundError:
-        st.error("The file '../data/final_features.csv' was not found.")
+        st.error("The file 'data/final_features.csv' was not found.")
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 
@@ -126,7 +126,7 @@ if selected_page == "Home":
     st.markdown("Comparing your recorded average power directly against the our predictions, ride by ride.")
 
     try:
-        df = pd.read_csv('../data/final_features.csv')
+        df = pd.read_csv('data/final_features.csv')
         df['Activity Date'] = pd.to_datetime(df['Activity Date'])
         df = df.sort_values('Activity Date')
         actual_power_col = 'Average Watts'
@@ -154,7 +154,7 @@ if selected_page == "Home":
         )
         st.plotly_chart(fig4, use_container_width=True)
     except FileNotFoundError:
-        st.error("The file '../data/final_features.csv' was not found.")
+        st.error("The file 'data/final_features.csv' was not found.")
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 

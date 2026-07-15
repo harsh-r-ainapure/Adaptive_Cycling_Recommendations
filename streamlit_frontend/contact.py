@@ -8,3 +8,5 @@ def show_contact_page():
     
     # Making the email a clickable link for convenience
     st.markdown("**Email:** [harsh.ainapure@harshainapure.dev](mailto:harsh.ainapure@harshainapure.dev)")
+
+    

@@ -7,4 +7,4 @@ def show_contact_page():
     st.markdown("For questions regarding this Privacy Policy or data handling practices, please contact:")
     
     # Making the email a clickable link for convenience
-    st.markdown("**Email:** [contact@yourdomain.com](mailto:contact@yourdomain.com)")
+    st.markdown("**Email:** [harsh.ainapure@harshainapure.dev](mailto:harsh.ainapure@harshainapure.dev)")

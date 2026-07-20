@@ -5,6 +5,7 @@ from datetime import timedelta
 import about
 import privacy
 import contact
+import home
 import plotly.graph_objects as go
 
 # Configure the page layout
@@ -32,6 +33,11 @@ st.sidebar.caption("© 2026 Your Strava ML Project")
 
 # --- PAGE ROUTING ---
 if selected_page == "Home":
+    home.show_homepage()   
+
+elif selected_page == "Adaptive Cycling Coach":
+    st.title("Adaptive Cycling Coach")
+    st.write("Your personalized ML recommendations will go here.")
     st.title("Performance Dashboard")
     st.markdown("Compare your current baseline metrics against the recommended targets based on recent ML outputs.")
     st.divider()
@@ -60,7 +66,7 @@ if selected_page == "Home":
 
     @st.cache_data
     def load_data():
-        df = pd.read_csv('data/final_features.csv')
+        df = pd.read_csv('../data/final_features.csv')
         df['Activity Date'] = pd.to_datetime(df['Activity Date'])
         df = df.sort_values(by='Activity Date')
         return df
@@ -93,7 +99,7 @@ if selected_page == "Home":
     st.markdown("A visual breakdown of how your capacity deviates from the baseline over time.")
 
     try:
-        df = pd.read_csv('data/final_features.csv')
+        df = pd.read_csv('../data/final_features.csv')
         df['Activity Date'] = pd.to_datetime(df['Activity Date'])
         latest_date = df['Activity Date'].max()
         six_months_ago = latest_date - timedelta(days=180)
@@ -126,7 +132,7 @@ if selected_page == "Home":
     st.markdown("Comparing your recorded average power directly against the our predictions, ride by ride.")
 
     try:
-        df = pd.read_csv('data/final_features.csv')
+        df = pd.read_csv('../data/final_features.csv')
         df['Activity Date'] = pd.to_datetime(df['Activity Date'])
         df = df.sort_values('Activity Date')
         actual_power_col = 'Average Watts'
@@ -157,10 +163,6 @@ if selected_page == "Home":
         st.error("The file 'data/final_features.csv' was not found.")
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
-
-elif selected_page == "Adaptive Cycling Coach":
-    st.title("Adaptive Cycling Coach")
-    st.write("Your personalized ML recommendations will go here.")
 
 elif selected_page == "About":
     about.show_about_page()

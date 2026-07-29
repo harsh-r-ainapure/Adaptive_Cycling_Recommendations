@@ -6,10 +6,22 @@ import about
 import privacy
 import contact
 import home
+import sync
 import plotly.graph_objects as go
+import requests
 
 # Configure the page layout
 st.set_page_config(page_title="Performance Dashboard", page_icon="🏃", layout="centered")
+
+
+# --- HELPER FUNCTIONS ---
+@st.cache_data
+def load_data():
+    df = pd.read_csv('../data/final_features.csv')
+    df['Activity Date'] = pd.to_datetime(df['Activity Date'])
+    df = df.sort_values(by='Activity Date')
+    return df
+
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title(" Navigation")
@@ -20,6 +32,7 @@ selected_page = st.sidebar.radio(
     "Go to",
     [
         "Home", 
+        "Sync",
         "Adaptive Cycling Coach", 
         "About", 
         "Privacy Policy", 
@@ -31,7 +44,6 @@ selected_page = st.sidebar.radio(
 st.sidebar.divider()
 st.sidebar.caption("© 2026 Your Strava ML Project")
 
-# --- PAGE ROUTING ---
 if selected_page == "Home":
     home.show_homepage()   
 
@@ -42,35 +54,92 @@ elif selected_page == "Adaptive Cycling Coach":
     st.markdown("Compare your current baseline metrics against the recommended targets based on recent ML outputs.")
     st.divider()
 
-    # Create two side-by-side columns
-    col1, col2 = st.columns(2)
+  
+    BACKEND_URL = "http://localhost:5000/recommendation"   
 
-    with col1:
-        st.subheader("Current Baseline")
-        with st.container(border=True):
-            st.metric(label="Baseline Distance", value="15.185")
-            st.metric(label="Baseline Elevation", value="109.0")
-            st.metric(label="Baseline HR", value="146.5")
+    if "jwt" not in st.session_state:
+     st.warning("Please connect your Intervals account first from the Sync page.")
+     st.stop()
 
-    with col2:
-        st.subheader("Recommendations")
-        with st.container(border=True):
-            st.metric(label="Recommended Distance", value="16.0", delta="0.815")
-            st.metric(label="Recommended Elevation", value="114.0", delta="5.0")
-            st.metric(
-                label="Recommended HR", 
-                value="154.0", 
-                delta="7.5",
-                delta_color="inverse"
-            )
+    headers = {
+    "Authorization": f"Bearer {st.session_state['jwt']}"
+}
 
-    @st.cache_data
-    def load_data():
-        df = pd.read_csv('../data/final_features.csv')
-        df['Activity Date'] = pd.to_datetime(df['Activity Date'])
-        df = df.sort_values(by='Activity Date')
-        return df
+    try:
+        
+        response = requests.get(BACKEND_URL, headers=headers)
 
+        if response.status_code == 200:
+            recommendation = response.json()["recommendation"]
+
+            baseline_distance = recommendation["baseline_distance"]
+            baseline_elevation = recommendation["baseline_elevation"]
+            baseline_hr = recommendation["baseline_hr"]
+
+            recommended_distance = recommendation["recommended_distance"]
+            recommended_elevation = recommendation["recommended_elevation"]
+            recommended_hr = recommendation["recommended_hr"]
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader("Current Baseline")
+                with st.container(border=True):
+                    st.metric(
+                        "Baseline Distance",
+                        round(baseline_distance, 2)
+                    )
+
+                    st.metric(
+                        "Baseline Elevation",
+                        round(baseline_elevation, 2)
+                    )
+
+                    st.metric(
+                        "Baseline HR",
+                        round(baseline_hr, 2)
+                    )
+
+            with col2:
+                st.subheader("Recommendations")
+                with st.container(border=True):
+                    st.metric(
+                        "Recommended Distance",
+                        round(recommended_distance, 2),
+                        delta=round(
+                            recommended_distance - baseline_distance,
+                            2
+                        )
+                    )
+
+                    st.metric(
+                        "Recommended Elevation",
+                        round(recommended_elevation, 2),
+                        delta=round(
+                            recommended_elevation - baseline_elevation,
+                            2
+                        )
+                    )
+
+                    st.metric(
+                        "Recommended HR",
+                        round(recommended_hr, 2),
+                        delta=round(
+                            recommended_hr - baseline_hr,
+                            2
+                        ),
+                        delta_color="inverse"
+                    )
+
+        else:
+          st.error(f"Status Code: {response.status_code}")
+          st.write(response.text)
+
+    except Exception as e:
+        st.error(f"Backend error: {e}")
+
+    # --- 6-MONTH FATIGUE TREND ---
+    st.divider()
     st.subheader("6-Month Fatigue Trend")
 
     try:
@@ -90,17 +159,17 @@ elif selected_page == "Adaptive Cycling Coach":
         fig.update_layout(hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
     except FileNotFoundError:
-        st.error("The file 'final_features.csv' was not found.")
+        st.error("The file '../data/final_features.csv' was not found.")
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 
+    # --- CAPACITY DEVIATION ANALYSIS ---
     st.divider()
     st.subheader("Capacity Deviation Analysis")
     st.markdown("A visual breakdown of how your capacity deviates from the baseline over time.")
 
     try:
-        df = pd.read_csv('../data/final_features.csv')
-        df['Activity Date'] = pd.to_datetime(df['Activity Date'])
+        df = load_data()
         latest_date = df['Activity Date'].max()
         six_months_ago = latest_date - timedelta(days=180)
         recent_df = df[df['Activity Date'] >= six_months_ago]
@@ -123,18 +192,17 @@ elif selected_page == "Adaptive Cycling Coach":
         )
         st.plotly_chart(fig2, use_container_width=True)
     except FileNotFoundError:
-        st.error("The file 'data/final_features.csv' was not found.")
+        st.error("The file '../data/final_features.csv' was not found.")
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 
+    # --- POWER TREND & PREDICTION ---
     st.divider()
     st.subheader("Average Power Trend & Prediction")
-    st.markdown("Comparing your recorded average power directly against the our predictions, ride by ride.")
+    st.markdown("Comparing your recorded average power directly against our predictions, ride by ride.")
 
     try:
-        df = pd.read_csv('../data/final_features.csv')
-        df['Activity Date'] = pd.to_datetime(df['Activity Date'])
-        df = df.sort_values('Activity Date')
+        df = load_data()
         actual_power_col = 'Average Watts'
         prediction_col = 'Estimated Power'
         power_df = df[df[actual_power_col] > 0].copy()
@@ -160,7 +228,7 @@ elif selected_page == "Adaptive Cycling Coach":
         )
         st.plotly_chart(fig4, use_container_width=True)
     except FileNotFoundError:
-        st.error("The file 'data/final_features.csv' was not found.")
+        st.error("The file '../data/final_features.csv' was not found.")
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 
@@ -172,3 +240,6 @@ elif selected_page == "Privacy Policy":
 
 elif selected_page == "Contact":
     contact.show_contact_page()
+
+elif selected_page == "Sync":
+    sync.show_sync_page()

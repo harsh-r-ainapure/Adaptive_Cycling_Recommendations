@@ -7,8 +7,13 @@ import cors from "cors";
 import dotenv from "dotenv";
 import pool from "./config/db.js";
 import { fileURLToPath } from "url";
+import syncUserRoutes from "./routers/syncuser_routes.js";
+import syncActiveRoutes from "./routers/syncactive_routes.js";
+import recommendationRouter from "./routers/recommendation_router.js";
 
 dotenv.config();
+
+console.log(process.env.SUPABASE_DB_URL);
 
 const app = express();
 
@@ -25,12 +30,25 @@ app.use(bodyParser.json());
 
 app.use(cors());
 
+app.use("/api/user", syncUserRoutes);
+
+app.use("/api/sync", syncActiveRoutes);
+
+app.use("/recommendation", recommendationRouter);
+
 const port = process.env.PORT || 3003;
 
 async function testDB() {
     try {
-        const result = await pool.query("SELECT NOW()");
-        console.log("Database Time:", result.rows[0].now);
+        const client = await pool.connect();
+
+        console.log(" Connected!");
+
+        const result = await client.query("SELECT version();");
+
+        console.log(result.rows[0]);
+
+        client.release();
     } catch (err) {
         console.error(err);
     }

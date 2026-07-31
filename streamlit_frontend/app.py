@@ -55,7 +55,7 @@ elif selected_page == "Adaptive Cycling Coach":
     st.divider()
 
   
-    BACKEND_URL = "http://localhost:5000/recommendation"   
+    BACKEND_URL = "https://adaptive-cycling-recommendations.onrender.com"  
 
     if "jwt" not in st.session_state:
      st.warning("Please connect your Intervals account first from the Sync page.")

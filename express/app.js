@@ -13,10 +13,7 @@ import recommendationRouter from "./routers/recommendation_router.js";
 
 dotenv.config();
 
-console.log(process.env.SUPABASE_DB_URL);
-
 const app = express();
-
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,11 +39,11 @@ async function testDB() {
     try {
         const client = await pool.connect();
 
-        console.log(" Connected!");
+       
 
         const result = await client.query("SELECT version();");
 
-        console.log(result.rows[0]);
+       
 
         client.release();
     } catch (err) {

@@ -91,9 +91,7 @@ const token = jwt.sign(
     }
 )
 
-res.redirect(
-    `http://localhost:8501/?token=${token}`
-);
+res.redirect(process.env.FRONTEND_URL);
     }
     catch(err){
         console.log("The error is " ,err)

@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import webbrowser
 
-BACKEND = "http://localhost:5000"
+BACKEND = "https://adaptive-cycling-recommendations.onrender.com"
 
 
 def show_sync_page():

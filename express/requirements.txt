@@ -1,0 +1,9 @@
+fitparse
+matplotlib
+numpy
+pandas
+plotly
+scikit-learn
+scipy
+streamlit
+xgboost

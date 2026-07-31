@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 def show_homepage():
     # 1. Top Right Logout Button
@@ -13,7 +14,10 @@ def show_homepage():
     logo_col1, logo_col2, logo_col3 = st.columns([1, 2, 1])
     with logo_col2:
         # Changed use_container_width to use_column_width
-        st.image("stravalogo.png", use_column_width=True)
+        BASE_DIR = Path(__file__).parent
+        logo = BASE_DIR / "stravalogo.png"
+
+        st.image(str(logo), use_container_width=True)
 
     # 3. Welcome Header
     st.markdown("<h1 style='text-align: center;'>Welcome back, Harsh</h1>", unsafe_allow_html=True)

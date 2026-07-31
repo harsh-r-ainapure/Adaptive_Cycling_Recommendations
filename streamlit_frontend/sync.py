@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 
+st.success("NEW CODE IS RUNNING")
+
 BACKEND = "https://adaptive-cycling-recommendations.onrender.com"
 
 # Initialize session state

@@ -24,7 +24,7 @@ def load_data(jwt):
         headers={
             "Authorization": f"Bearer {jwt}"
         },
-        timeout=30
+        timeout=None
     )
 
     response.raise_for_status()

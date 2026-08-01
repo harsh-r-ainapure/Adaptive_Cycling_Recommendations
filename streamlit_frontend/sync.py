@@ -22,6 +22,8 @@ def show_sync_page():
     if "token" in params:
         st.session_state["jwt"] = params["token"]
 
+        st.code(st.session_state["jwt"])
+
         # Remove token from URL after saving it
         del st.query_params["token"]
 

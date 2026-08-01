@@ -14,12 +14,26 @@ import requests
 st.set_page_config(page_title="Performance Dashboard", page_icon="🏃", layout="centered")
 
 
-# --- HELPER FUNCTIONS ---
-@st.cache_data
-def load_data():
-    df = pd.read_csv('../data/final_features.csv')
-    df['Activity Date'] = pd.to_datetime(df['Activity Date'])
-    df = df.sort_values(by='Activity Date')
+BACKEND_URL = "https://adaptive-cycling-recommendations.onrender.com"
+
+@st.cache_data(ttl=10)
+def load_data(jwt):
+
+    response = requests.get(
+        f"{BACKEND_URL}/dashboard",
+        headers={
+            "Authorization": f"Bearer {jwt}"
+        },
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    df = pd.DataFrame(response.json())
+
+    if not df.empty:
+        df["activity_date"] = pd.to_datetime(df["activity_date"])
+
     return df
 
 
@@ -53,9 +67,6 @@ elif selected_page == "Adaptive Cycling Coach":
     st.title("Performance Dashboard")
     st.markdown("Compare your current baseline metrics against the recommended targets based on recent ML outputs.")
     st.divider()
-
-  
-    BACKEND_URL = "https://adaptive-cycling-recommendations.onrender.com"  
 
     if "jwt" not in st.session_state:
      st.warning("Please connect your Intervals account first from the Sync page.")
@@ -146,23 +157,22 @@ elif selected_page == "Adaptive Cycling Coach":
     st.subheader("6-Month Fatigue Trend")
 
     try:
-        df = load_data()
-        latest_date = df['Activity Date'].max()
+        df = load_data(st.session_state["jwt"])
+        latest_date = df['activity_date'].max()
         six_months_ago = latest_date - timedelta(days=180)
-        recent_df = df[df['Activity Date'] >= six_months_ago]
+        recent_df = df[df['activity_date'] >= six_months_ago]
         
         fig = px.line(
             recent_df, 
-            x='Activity Date', 
-            y='Fatigue', 
+            x='activity_date', 
+            y='fatigue', 
             markers=True,
             title="Fatigue Levels Over Recent Rides",
-            labels={'Activity Date': 'Date of Activity', 'Fatigue': 'Calculated Fatigue'}
+            labels={'activity_date': 'Date of Activity', 'fatigue': 'Calculated Fatigue'}
         )
         fig.update_layout(hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
-    except FileNotFoundError:
-        st.error("The file '../data/final_features.csv' was not found.")
+   
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 
@@ -172,30 +182,29 @@ elif selected_page == "Adaptive Cycling Coach":
     st.markdown("A visual breakdown of how your capacity deviates from the baseline over time.")
 
     try:
-        df = load_data()
-        latest_date = df['Activity Date'].max()
+        df = load_data(st.session_state["jwt"])
+        latest_date = df['activity_date'].max()
         six_months_ago = latest_date - timedelta(days=180)
-        recent_df = df[df['Activity Date'] >= six_months_ago]
+        recent_df = df[df['activity_date'] >= six_months_ago]
         
         fig2 = px.bar(
             recent_df, 
-            x='Activity Date', 
-            y='Capacity_Deviation',
-            color='Capacity_Deviation',
+            x='activity_date', 
+            y='capacity_deviation',
+            color='capacity_deviation',
             color_continuous_scale=px.colors.diverging.RdYlGn,
             title="Daily Capacity Deviation",
-            labels={'Activity Date': 'Date', 'Capacity_Deviation': 'Deviation Magnitude'}
+            labels={'activity_date': 'Date', 'capacity_deviation': 'Deviation Magnitude'}
         )
         fig2.update_layout(
             template="plotly_dark", 
-            xaxis_title="Activity Date",
+            xaxis_title="activity_date",
             yaxis_title="Deviation",
             coloraxis_showscale=False,
             hovermode="x unified"
         )
         st.plotly_chart(fig2, use_container_width=True)
-    except FileNotFoundError:
-        st.error("The file '../data/final_features.csv' was not found.")
+    
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 
@@ -205,19 +214,19 @@ elif selected_page == "Adaptive Cycling Coach":
     st.markdown("Comparing your recorded average power directly against our predictions, ride by ride.")
 
     try:
-        df = load_data()
-        actual_power_col = 'Average Watts'
-        prediction_col = 'Estimated Power'
+        df = load_data(st.session_state["jwt"])
+        actual_power_col = 'average_power'
+        prediction_col = 'estimated_power'
         power_df = df[df[actual_power_col] > 0].copy()
 
         fig4 = go.Figure()
         fig4.add_trace(go.Scatter(
-            x=power_df['Activity Date'], y=power_df[actual_power_col],
+            x=power_df['activity_date'], y=power_df[actual_power_col],
             mode='markers', name='Actual Power (Avg Watts)',
             marker=dict(color='#87CEEB', size=7, opacity=0.8), hoverinfo='x+y'
         ))
         fig4.add_trace(go.Scatter(
-            x=power_df['Activity Date'], y=power_df[prediction_col],
+            x=power_df['activity_date'], y=power_df[prediction_col],
             mode='markers', name='Predicted Power (RF Model)',
             marker=dict(color='#00E676', size=7, symbol='diamond', opacity=0.8), hoverinfo='x+y'
         ))
@@ -230,8 +239,7 @@ elif selected_page == "Adaptive Cycling Coach":
             margin=dict(l=0, r=0, t=40, b=0)
         )
         st.plotly_chart(fig4, use_container_width=True)
-    except FileNotFoundError:
-        st.error("The file '../data/final_features.csv' was not found.")
+   
     except KeyError as e:
         st.error(f"Missing expected column in the dataset: {e}")
 

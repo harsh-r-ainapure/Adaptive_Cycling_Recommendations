@@ -7,3 +7,5 @@ scikit-learn
 scipy
 streamlit
 xgboost
+python-dotenv
+psycopg2-binary

@@ -36,16 +36,7 @@ const recommendation = async (req, res, next) => {
 
         const userId = req.user.id;
 
-        const scriptPath1 = path.join(process.cwd(), "python", "fatigue.py");
-        const scriptPath2 = path.join(process.cwd(), "python", "capacities.py");
-        const scriptPath3 = path.join(process.cwd(), "python", "severity.py");
-        const scriptPath4 = path.join(process.cwd(), "python", "recommendation.py");
-
-        await runPython(scriptPath1, userId);
-        await runPython(scriptPath2, userId);
-        await runPython(scriptPath3, userId);
-        await runPython(scriptPath4, userId);
-
+        
            
 
       
@@ -73,6 +64,8 @@ LIMIT 1;
     recommendation: result.rows[0],
     message: "Recommendations generated successfully."
 });
+
+ 
 
     } catch (err) {
         next(err);

@@ -4,6 +4,33 @@ import fs from "fs/promises";
 import path from "path";
 import { spawn } from "child_process";
 
+function runPython(scriptPath, userId) {
+    return new Promise((resolve, reject) => {
+
+        const pythonProcess = spawn(
+            process.platform === "win32" ? "py" : "python",
+            [scriptPath, userId]
+        );
+
+        pythonProcess.stdout.on("data", data => {
+            console.log(data.toString());
+        });
+
+        pythonProcess.stderr.on("data", data => {
+            console.error(data.toString());
+        });
+
+        pythonProcess.on("close", code => {
+            if (code === 0)
+                resolve();
+            else
+                reject(new Error(`${scriptPath} exited with code ${code}`));
+        });
+
+        pythonProcess.on("error", reject);
+    });
+}
+
 const syncActivities = async (req, res) => {
 
     try {
@@ -235,6 +262,17 @@ await new Promise((resolve, reject) => {
             force: true
         });
 
+    const scriptPath1 = path.join(process.cwd(), "python", "fatigue.py");
+        const scriptPath2 = path.join(process.cwd(), "python", "capacities.py");
+        const scriptPath3 = path.join(process.cwd(), "python", "severity.py");
+        const scriptPath4 = path.join(process.cwd(), "python", "recommendation.py");
+
+        await runPython(scriptPath1, userID);
+        await runPython(scriptPath2, userID);
+        await runPython(scriptPath3, userID);
+        await runPython(scriptPath4, userID);
+
+
         res.json({
             message: "Sync completed successfully."
         });
@@ -250,6 +288,8 @@ await new Promise((resolve, reject) => {
     } 
 
 };
+
+
 
 export {
     syncActivities

@@ -66,8 +66,11 @@ elif selected_page == "Adaptive Cycling Coach":
 }
 
     try:
-        
-        response = requests.get(BACKEND_URL, headers=headers)
+        response = requests.get(
+        f"{BACKEND_URL}/recommendation",
+        headers=headers,
+        timeout=60,
+          )
 
         if response.status_code == 200:
             recommendation = response.json()["recommendation"]

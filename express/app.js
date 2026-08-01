@@ -10,6 +10,8 @@ import { fileURLToPath } from "url";
 import syncUserRoutes from "./routers/syncuser_routes.js";
 import syncActiveRoutes from "./routers/syncactive_routes.js";
 import recommendationRouter from "./routers/recommendation_router.js";
+import dashboardRouter from "./routers/dashboard_router.js";
+
 
 dotenv.config();
 
@@ -32,6 +34,8 @@ app.use("/api/user", syncUserRoutes);
 app.use("/api/sync", syncActiveRoutes);
 
 app.use("/recommendation", recommendationRouter);
+
+app.use("/dashboard", dashboardRouter);
 
 const port = process.env.PORT || 3003;
 

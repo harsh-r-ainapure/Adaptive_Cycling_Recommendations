@@ -270,4 +270,4 @@ cursor.close()
 cursor = None
 conn.close()
 
-print("Recommendation saved successfully.")
+print("Recommendation saved successfully....")

@@ -152,6 +152,8 @@ df["Percent_Change"] = (
     / df["Baseline_Pow"]
 )
 
+
+
 cursor = conn.cursor()
 
 query4 = """

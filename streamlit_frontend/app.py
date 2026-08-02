@@ -86,11 +86,11 @@ elif selected_page == "Adaptive Cycling Coach":
         if response.status_code == 200:
             recommendation = response.json()["recommendation"]
 
-            baseline_distance = recommendation["baseline_distance"]
+            baseline_distance = recommendation["baseline_distance"] / 1000
             baseline_elevation = recommendation["baseline_elevation"]
             baseline_hr = recommendation["baseline_hr"]
 
-            recommended_distance = recommendation["recommended_distance"]
+            recommended_distance = recommendation["recommended_distance"] / 1000
             recommended_elevation = recommendation["recommended_elevation"]
             recommended_hr = recommendation["recommended_hr"]
 
@@ -100,7 +100,7 @@ elif selected_page == "Adaptive Cycling Coach":
                 st.subheader("Current Baseline")
                 with st.container(border=True):
                     st.metric(
-                        "Baseline Distance",
+                        "Baseline Distance (km)",
                         round(baseline_distance, 2)
                     )
 
@@ -118,7 +118,7 @@ elif selected_page == "Adaptive Cycling Coach":
                 st.subheader("Recommendations")
                 with st.container(border=True):
                     st.metric(
-                        "Recommended Distance",
+                        "Recommended Distance (km)",
                         round(recommended_distance, 2),
                         delta=round(
                             recommended_distance - baseline_distance,

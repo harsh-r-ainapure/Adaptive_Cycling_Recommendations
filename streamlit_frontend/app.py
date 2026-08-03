@@ -9,6 +9,7 @@ import home
 import sync
 import plotly.graph_objects as go
 import requests
+import form
 
 # Configure the page layout
 st.set_page_config(page_title="Performance Dashboard", page_icon="🏃", layout="centered")
@@ -47,6 +48,7 @@ selected_page = st.sidebar.radio(
     [
         "Home", 
         "Sync",
+        "Setup Form"
         "Adaptive Cycling Coach", 
         "About", 
         "Privacy Policy", 
@@ -254,3 +256,5 @@ elif selected_page == "Contact":
 
 elif selected_page == "Sync":
     sync.show_sync_page()
+elif selected_page == "Setup Form":  
+    form.show_form_page()

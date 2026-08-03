@@ -23,7 +23,15 @@ def show_sync_page():
     2. Connect your Strava/Garmin account inside Intervals.
     3. Return here and click **Connect Intervals**.
     4. Click **Sync Activities**.
+    5. Fill out your rider profile to calibrate your power baseline.
     """)
+
+    # Direct button to guide the user to the form page
+    if st.button("Go to Setup Form ➔"):
+        st.session_state["selected_page"] = "Setup Form"
+        st.rerun()
+
+   
     st.divider()
 
     # -------------------------

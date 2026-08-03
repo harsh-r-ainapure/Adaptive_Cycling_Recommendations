@@ -3,6 +3,55 @@ import axios from "axios"
 import jwt from "jsonwebtoken"
 
 
+const saveProfile = async (req, res) => {
+
+    try {
+
+        const userId = req.user.id;
+
+        const {
+            name,
+            has_power_meter,
+            power_meter_month,
+            power_meter_year
+        } = req.body;
+
+        await pool.query(
+            `
+            UPDATE users
+            SET
+                name = $1,
+                has_power_meter = $2,
+                power_meter_month = $3,
+                power_meter_year = $4
+            WHERE id = $5
+            `,
+            [
+                name,
+                has_power_meter,
+                power_meter_month,
+                power_meter_year,
+                userId
+            ]
+        );
+
+        return res.json({
+            message: "Profile saved successfully."
+        });
+
+    } catch (err) {
+
+        console.error(err);
+
+        return res.status(500).json({
+            message: "Unable to save profile."
+        });
+
+    }
+
+};
+
+
 const signup_redirectt = async (req , res , next ) => {
  try{
    const authURL =
@@ -101,7 +150,10 @@ res.redirect(`${process.env.FRONTEND_URL}?token=${token}`);
     }
 }
 
+
+
 export {
     signup_callback,
-    signup_redirectt
+    signup_redirectt,
+    saveProfile
 };

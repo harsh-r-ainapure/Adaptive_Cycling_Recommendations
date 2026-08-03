@@ -37,6 +37,20 @@ const syncActivities = async (req, res) => {
 
         const userID = req.user.id;
 
+        const profileResult = await pool.query(
+`
+SELECT
+    has_power_meter,
+    power_meter_month,
+    power_meter_year
+FROM users
+WHERE id = $1
+`,
+[userID]
+);
+
+const profile = profileResult.rows[0];
+
         // Get access token
         const tokenResult = await pool.query(
             `
@@ -67,7 +81,22 @@ const syncActivities = async (req, res) => {
 
         if (activityCount === 0) {
 
-            oldest = "2020-11-19";
+             if (
+        profile &&
+    profile.has_power_meter &&
+    profile.power_meter_month != null &&
+    profile.power_meter_year != null
+    ) {
+
+        oldest =
+            `${profile.power_meter_year}-` +
+            `${String(profile.power_meter_month).padStart(2, "0")}-01`;
+
+    } else {
+
+        oldest = "2020-11-19";
+
+    }
 
         } else {
 

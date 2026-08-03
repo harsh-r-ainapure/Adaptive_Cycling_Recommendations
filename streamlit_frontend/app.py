@@ -39,27 +39,38 @@ def load_data(jwt):
 
 
 # --- SIDEBAR NAVIGATION ---
-st.sidebar.title(" Navigation")
+# ----------------------------
+# SIDEBAR NAVIGATION
+# ----------------------------
+
+PAGES = [
+    "Home",
+    "Sync",
+    "Setup Form",
+    "Adaptive Cycling Coach",
+    "About",
+    "Privacy Policy",
+    "Contact"
+]
+
+if "selected_page" not in st.session_state:
+    st.session_state["selected_page"] = "Home"
+
+st.sidebar.title("Navigation")
 st.sidebar.markdown("Select a page to view:")
 
-# Create the clickable menu
 selected_page = st.sidebar.radio(
     "Go to",
-    [
-        "Home", 
-        "Sync",
-        "Setup Form"
-        "Adaptive Cycling Coach", 
-        "About", 
-        "Privacy Policy", 
-        "Contact"
-    ],
-    label_visibility="collapsed" 
+    PAGES,
+    index=PAGES.index(st.session_state["selected_page"]),
+    label_visibility="collapsed"
 )
 
-st.sidebar.divider()
-st.sidebar.caption("© 2026 Your Strava ML Project")
+# Keep session state synchronized
+st.session_state["selected_page"] = selected_page
 
+st.sidebar.divider()
+st.sidebar.caption("© 2026 Adaptive Cycling Coach")
 if selected_page == "Home":
     home.show_homepage()   
 

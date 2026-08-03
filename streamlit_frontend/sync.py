@@ -15,6 +15,18 @@ def show_sync_page():
     st.title("Sync")
 
     # -------------------------
+    # First time here section
+    # -------------------------
+    st.markdown("### First time here?")
+    st.markdown("""
+    1. Create an Intervals.icu account → [Intervals.icu Sign Up](https://intervals.icu/)
+    2. Connect your Strava/Garmin account inside Intervals.
+    3. Return here and click **Connect Intervals**.
+    4. Click **Sync Activities**.
+    """)
+    st.divider()
+
+    # -------------------------
     # Read JWT safely
     # -------------------------
     jwt = st.session_state.get("jwt")
@@ -27,7 +39,6 @@ def show_sync_page():
     token = params.get("token")
 
     if token:
-
         # query_params may return a list depending on Streamlit version
         if isinstance(token, list):
             token = token[0]

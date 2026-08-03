@@ -1,4 +1,4 @@
-import authenticate from "../middlewares/authMiddleware.js";
+import authenticate from "../middleware/authmiddleware.js";
 import {
     signup_redirectt,
     signup_callback,

@@ -31,8 +31,8 @@ def show_homepage():
    
             
     with btn_col2:
-        if st.button("History Charts", use_container_width=True):
-            st.session_state["selected_page"] = "Setup Form"
+        if st.button("Sync Activity", use_container_width=True):
+            st.session_state["selected_page"] = "Sync"
             st.rerun()
             
             

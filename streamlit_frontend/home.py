@@ -28,14 +28,12 @@ def show_homepage():
     # 4. Main Navigation Options
     btn_col1, btn_col2, btn_col3 = st.columns(3)
 
-    with btn_col1:
-        if st.button("View Recommendations", use_container_width=True, type="primary"):
-            st.info("Routing to ML Recommendations...")
+   
             
     with btn_col2:
         if st.button("History Charts", use_container_width=True):
-            st.info("Routing to Performance Dashboard...")
+            st.session_state["selected_page"] = "Setup Form"
+            st.rerun()
             
-    with btn_col3:
-        if st.button("Sync Strava Data", use_container_width=True):
-            st.info("Fetching latest activities from API...")
+            
+   

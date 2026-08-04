@@ -129,7 +129,10 @@ const profile = profileResult.rows[0];
             }
         );
 
-        const activities = summaryResponse.data;
+        const activities = summaryResponse.data.filter(activity =>
+    activity.type === "Ride" ||
+    activity.type === "VirtualRide"
+);
 
         console.log(
     `Fetched ${activities.length} activities`
@@ -242,10 +245,21 @@ console.log(fitResponse.data.length);
 
         }
 
+      const preprocessPath = path.join(
+    process.cwd(),
+    "python",
+    "preprocess.py"
+);
+
         const scriptPath = path.join(
     process.cwd(),
     "python",
     "features.py"
+);
+
+await runPython(
+    preprocessPath,
+    userID
 );
 
 const python = spawn(
@@ -290,12 +304,14 @@ await new Promise((resolve, reject) => {
             recursive: true,
             force: true
         });
-
-    const scriptPath1 = path.join(process.cwd(), "python", "fatigue.py");
+   
+        
+        const scriptPath1 = path.join(process.cwd(), "python", "fatigue.py");
         const scriptPath2 = path.join(process.cwd(), "python", "capacities.py");
         const scriptPath3 = path.join(process.cwd(), "python", "severity.py");
         const scriptPath4 = path.join(process.cwd(), "python", "recommendation.py");
 
+        
         await runPython(scriptPath1, userID);
         await runPython(scriptPath2, userID);
         await runPython(scriptPath3, userID);

@@ -700,7 +700,6 @@ for _, row in df.iterrows():
         row["Power_Zone_Percent"],
         row["Recovery_Zone_Percent"],
         row["baseline_hr"],
-
         row["Heart Ratio"],
         row["Cadence Ratio"],
         row["ELE Ratio"],

@@ -250,8 +250,8 @@ const syncActivities = async (req, res) => {
 
         try {
 
-            summaryResponse = await axios.get(
-                `https://intervals.icu/api/v1/athlete/${intervalsId}/activities`,
+            const summaryResponse = await axios.get(
+    `https://intervals.icu/api/v1/athlete/0/activities`,
                 {
                     headers: {
                         Authorization: `Bearer ${accessToken}`
@@ -264,7 +264,30 @@ const syncActivities = async (req, res) => {
 
                     timeout: 60000
                 }
+
+                
             );
+
+            console.log("Intervals API status:", summaryResponse.status);
+
+console.log(
+    "Intervals raw activity count:",
+    Array.isArray(summaryResponse.data)
+        ? summaryResponse.data.length
+        : "NOT AN ARRAY"
+);
+
+console.log(
+    "Intervals activity types:",
+    Array.isArray(summaryResponse.data)
+        ? summaryResponse.data.map(a => ({
+            id: a.id,
+            type: a.type,
+            name: a.name,
+            start_date: a.start_date
+        }))
+        : summaryResponse.data
+);
 
         } catch (error) {
 

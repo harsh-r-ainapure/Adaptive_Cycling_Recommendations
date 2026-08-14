@@ -10,7 +10,6 @@ import { spawn } from "child_process";
 // ============================================================
 
 function runPython(scriptPath, ...args) {
-
     return new Promise((resolve, reject) => {
 
         const pythonCommand =
@@ -28,7 +27,6 @@ function runPython(scriptPath, ...args) {
         });
 
         pythonProcess.stderr.on("data", (data) => {
-
             const message = data.toString();
 
             stderr += message;
@@ -43,23 +41,60 @@ function runPython(scriptPath, ...args) {
         pythonProcess.on("close", (code) => {
 
             if (code === 0) {
-
                 resolve();
-
             } else {
-
                 reject(
                     new Error(
                         `${path.basename(scriptPath)} exited with code ${code}\n${stderr}`
                     )
                 );
-
             }
 
         });
 
     });
+}
 
+
+// ============================================================
+// SAFE NUMBER HELPER
+// ============================================================
+
+function numberOrNull(value) {
+
+    if (
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
+        return null;
+    }
+
+    const number = Number(value);
+
+    return Number.isFinite(number)
+        ? number
+        : null;
+}
+
+
+// ============================================================
+// SAFE DATE HELPER
+// ============================================================
+
+function dateOrNull(value) {
+
+    if (!value) {
+        return null;
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date.toISOString();
 }
 
 
@@ -77,7 +112,15 @@ const syncActivities = async (req, res) => {
         // 1. GET LOGGED-IN USER
         // ====================================================
 
-        const userID = req.user.id;
+        const userID = req.user?.id;
+
+        if (!userID) {
+
+            return res.status(401).json({
+                message: "User is not authenticated."
+            });
+
+        }
 
         console.log(
             `Starting activity sync for user: ${userID}`
@@ -217,8 +260,6 @@ const syncActivities = async (req, res) => {
 
                 const latestDate = new Date(latest);
 
-                // Go back one day so we don't miss
-                // activities around the boundary.
                 latestDate.setDate(
                     latestDate.getDate() - 1
                 );
@@ -250,8 +291,14 @@ const syncActivities = async (req, res) => {
 
         try {
 
-            const summaryResponse = await axios.get(
-    `https://intervals.icu/api/v1/athlete/0/activities`,
+            // IMPORTANT:
+            // DO NOT PUT "const" HERE.
+            //
+            // We declared summaryResponse above so that
+            // it remains available after this try block.
+
+            summaryResponse = await axios.get(
+                `https://intervals.icu/api/v1/athlete/0/activities`,
                 {
                     headers: {
                         Authorization: `Bearer ${accessToken}`
@@ -264,36 +311,21 @@ const syncActivities = async (req, res) => {
 
                     timeout: 60000
                 }
-
-                
             );
 
-            console.log("Intervals API status:", summaryResponse.status);
 
-console.log(
-    "Intervals raw activity count:",
-    Array.isArray(summaryResponse.data)
-        ? summaryResponse.data.length
-        : "NOT AN ARRAY"
-);
+            console.log(
+                "Intervals API status:",
+                summaryResponse.status
+            );
 
-console.log(
-    "Intervals activity types:",
-    Array.isArray(summaryResponse.data)
-        ? summaryResponse.data.map(a => ({
-            id: a.id,
-            type: a.type,
-            name: a.name,
-            start_date: a.start_date
-        }))
-        : summaryResponse.data
-);
 
         } catch (error) {
 
             console.error(
-                "Intervals API request failed:"
+                "Intervals API request failed."
             );
+
 
             if (error.response) {
 
@@ -317,44 +349,84 @@ console.log(
 
 
             return res.status(502).json({
-                message: "Failed to fetch activities from Intervals.icu."
+                message:
+                    "Failed to fetch activities from Intervals.icu."
             });
 
         }
 
 
+        // ====================================================
+        // 5. SAFELY READ API RESPONSE
+        // ====================================================
+
         const allActivities =
-            Array.isArray(summaryResponse.data)
+            Array.isArray(summaryResponse?.data)
                 ? summaryResponse.data
                 : [];
 
 
         console.log(
-    "========== FIRST RAW ACTIVITY =========="
-);
-
-console.log(
-    JSON.stringify(
-        allActivities[0],
-        null,
-        2
-    )
-);
-
-console.log(
-    "========================================"
-);
+            "Intervals raw activity count:",
+            allActivities.length
+        );
 
 
         // ====================================================
-        // 5. KEEP ONLY CYCLING ACTIVITIES
+        // DEBUG FIRST RAW ACTIVITY
         // ====================================================
 
-        // const activities = allActivities.filter(
-        //     (activity) =>
-        //         activity.type === "Ride" ||
-        //         activity.type === "VirtualRide"
-        // );
+        if (allActivities.length > 0) {
+
+            console.log(
+                "========== FIRST RAW ACTIVITY =========="
+            );
+
+            console.log(
+                JSON.stringify(
+                    allActivities[0],
+                    null,
+                    2
+                )
+            );
+
+            console.log(
+                "========================================"
+            );
+
+        }
+
+
+        // ====================================================
+        // DEBUG ACTIVITY IDs
+        // ====================================================
+
+        console.log(
+            "Intervals activity IDs:"
+        );
+
+        console.log(
+            allActivities.map(
+                activity => activity?.id
+            )
+        );
+
+
+        // ====================================================
+        // 6. KEEP ACTIVITIES
+        // ====================================================
+        //
+        // We are intentionally NOT filtering by type yet.
+        //
+        // Your previous logs showed:
+        //
+        // type: undefined
+        //
+        // So filtering by activity.type right now could
+        // incorrectly remove every activity.
+        //
+        // Once we inspect the real raw object, we can add
+        // an exact cycling filter if necessary.
 
         const activities = allActivities;
 
@@ -364,34 +436,32 @@ console.log(
         );
 
         console.log(
-    "RAW ACTIVITIES:",
-    allActivities.length
-);
-
-console.log(
-    "ACTIVITIES WE WILL PROCESS:",
-    activities.length
-);
+            `ACTIVITIES WE WILL PROCESS: ${activities.length}`
+        );
 
 
         // ====================================================
-        // 6. NOTHING TO SYNC
+        // 7. NOTHING TO SYNC
         // ====================================================
 
         if (activities.length === 0) {
 
             return res.status(200).json({
                 message:
-                    "No cycling activities found for the requested date range.",
+                    "No activities found for the requested date range.",
+
                 fetched: 0,
-                inserted: 0
+
+                inserted: 0,
+
+                fit_files_downloaded: 0
             });
 
         }
 
 
         // ====================================================
-        // 7. INSERT / UPDATE ACTIVITIES
+        // 8. INSERT / UPDATE ACTIVITIES
         // ====================================================
 
         let insertedCount = 0;
@@ -399,7 +469,7 @@ console.log(
 
         for (const activity of activities) {
 
-            if (!activity.id) {
+            if (!activity?.id) {
 
                 console.warn(
                     "Skipping activity without an ID."
@@ -408,6 +478,93 @@ console.log(
                 continue;
 
             }
+
+
+            // ------------------------------------------------
+            // INTERVALS FIELD MAPPING
+            // ------------------------------------------------
+            //
+            // Keep multiple fallbacks because the exact
+            // activity payload can vary depending on source.
+            //
+            // raw_data always stores the complete API object.
+
+            const activityDate =
+                activity.start_date_local ||
+                activity.start_date ||
+                activity.startDate ||
+                null;
+
+
+            const distance =
+                activity.distance ??
+                activity.distance_km ??
+                null;
+
+
+            const movingTime =
+                activity.moving_time ??
+                activity.movingTime ??
+                null;
+
+
+            const elapsedTime =
+                activity.elapsed_time ??
+                activity.elapsedTime ??
+                null;
+
+
+            const averageSpeed =
+                activity.average_speed ??
+                activity.averageSpeed ??
+                null;
+
+
+            const averagePower =
+                activity.icu_average_watts ??
+                activity.average_watts ??
+                activity.average_power ??
+                activity.averagePower ??
+                null;
+
+
+            const averageHR =
+                activity.average_heartrate ??
+                activity.average_hr ??
+                activity.averageHeartRate ??
+                null;
+
+
+            const maxHR =
+                activity.max_heartrate ??
+                activity.max_hr ??
+                activity.maxHeartRate ??
+                null;
+
+
+            const averageCadence =
+                activity.average_cadence ??
+                activity.averageCadence ??
+                null;
+
+
+            const elevationGain =
+                activity.total_elevation_gain ??
+                activity.elevation_gain ??
+                activity.elevationGain ??
+                null;
+
+
+            const elevationLoss =
+                activity.total_elevation_loss ??
+                activity.elevation_loss ??
+                activity.elevationLoss ??
+                null;
+
+
+            console.log(
+                `Processing activity ${activity.id}`
+            );
 
 
             await pool.query(
@@ -429,6 +586,7 @@ console.log(
                     elevation_loss,
                     raw_data
                 )
+
                 VALUES
                 (
                     $1,
@@ -491,32 +649,33 @@ console.log(
                     raw_data =
                         EXCLUDED.raw_data
                 `,
+
                 [
                     userID,
 
-                    activity.id,
+                    String(activity.id),
 
-                    activity.start_date || null,
+                    dateOrNull(activityDate),
 
-                    activity.distance || null,
+                    numberOrNull(distance),
 
-                    activity.moving_time || null,
+                    numberOrNull(movingTime),
 
-                    activity.elapsed_time || null,
+                    numberOrNull(elapsedTime),
 
-                    activity.average_speed || null,
+                    numberOrNull(averageSpeed),
 
-                    activity.icu_average_watts || null,
+                    numberOrNull(averagePower),
 
-                    activity.average_heartrate || null,
+                    numberOrNull(averageHR),
 
-                    activity.max_heartrate || null,
+                    numberOrNull(maxHR),
 
-                    activity.average_cadence || null,
+                    numberOrNull(averageCadence),
 
-                    activity.total_elevation_gain || null,
+                    numberOrNull(elevationGain),
 
-                    activity.total_elevation_loss || null,
+                    numberOrNull(elevationLoss),
 
                     JSON.stringify(activity)
                 ]
@@ -534,7 +693,7 @@ console.log(
 
 
         // ====================================================
-        // 8. CREATE TEMP DIRECTORY FOR FIT FILES
+        // 9. CREATE TEMP DIRECTORY FOR FIT FILES
         // ====================================================
 
         tempFolder = path.join(
@@ -558,7 +717,7 @@ console.log(
 
 
         // ====================================================
-        // 9. DOWNLOAD FIT FILES
+        // 10. DOWNLOAD FIT FILES
         // ====================================================
 
         let fitCount = 0;
@@ -566,18 +725,24 @@ console.log(
 
         for (const activity of activities) {
 
-            if (!activity.id) {
+            if (!activity?.id) {
                 continue;
             }
 
 
             try {
 
+                console.log(
+                    `Downloading FIT for activity ${activity.id}...`
+                );
+
+
                 const fitResponse = await axios.get(
                     `https://intervals.icu/api/v1/activity/${activity.id}/file`,
                     {
                         headers: {
-                            Authorization: `Bearer ${accessToken}`
+                            Authorization:
+                                `Bearer ${accessToken}`
                         },
 
                         responseType: "arraybuffer",
@@ -626,7 +791,37 @@ console.log(
 
 
         // ====================================================
-        // 10. RUN FEATURE PREPROCESSING
+        // 11. IF NO FIT FILES WERE AVAILABLE
+        // ====================================================
+
+        if (fitCount === 0) {
+
+            console.warn(
+                "No FIT files were downloaded. Skipping Python ML pipeline."
+            );
+
+
+            return res.status(200).json({
+
+                message:
+                    "Activities synced, but no FIT files were available for processing.",
+
+                fetched:
+                    activities.length,
+
+                activities_processed:
+                    insertedCount,
+
+                fit_files_downloaded:
+                    0
+
+            });
+
+        }
+
+
+        // ====================================================
+        // 12. RUN PREPROCESSING
         // ====================================================
 
         const preprocessPath = path.join(
@@ -648,7 +843,7 @@ console.log(
 
 
         // ====================================================
-        // 11. EXTRACT FEATURES FROM FIT FILES
+        // 13. EXTRACT FEATURES
         // ====================================================
 
         const featuresPath = path.join(
@@ -671,7 +866,7 @@ console.log(
 
 
         // ====================================================
-        // 12. RUN FATIGUE MODEL
+        // 14. RUN FATIGUE MODEL
         // ====================================================
 
         const fatiguePath = path.join(
@@ -693,7 +888,7 @@ console.log(
 
 
         // ====================================================
-        // 13. RUN CAPACITY MODEL
+        // 15. RUN CAPACITY MODEL
         // ====================================================
 
         const capacityPath = path.join(
@@ -715,7 +910,7 @@ console.log(
 
 
         // ====================================================
-        // 14. RUN SEVERITY MODEL
+        // 16. RUN SEVERITY MODEL
         // ====================================================
 
         const severityPath = path.join(
@@ -737,7 +932,7 @@ console.log(
 
 
         // ====================================================
-        // 15. RUN RECOMMENDATION MODEL
+        // 17. RUN RECOMMENDATION MODEL
         // ====================================================
 
         const recommendationPath = path.join(
@@ -759,7 +954,7 @@ console.log(
 
 
         // ====================================================
-        // 16. SUCCESS
+        // 18. SUCCESS
         // ====================================================
 
         console.log(
@@ -772,11 +967,14 @@ console.log(
             message:
                 "Sync and analysis completed successfully.",
 
-            fetched: activities.length,
+            fetched:
+                activities.length,
 
-            activities_processed: insertedCount,
+            activities_processed:
+                insertedCount,
 
-            fit_files_downloaded: fitCount
+            fit_files_downloaded:
+                fitCount
 
         });
 
@@ -784,10 +982,18 @@ console.log(
     } catch (err) {
 
         console.error(
-            "Sync failed:"
+            "========================================"
+        );
+
+        console.error(
+            "SYNC FAILED"
         );
 
         console.error(err);
+
+        console.error(
+            "========================================"
+        );
 
 
         return res.status(500).json({

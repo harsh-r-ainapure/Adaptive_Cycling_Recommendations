@@ -329,15 +329,34 @@ console.log(
                 : [];
 
 
+        console.log(
+    "========== FIRST RAW ACTIVITY =========="
+);
+
+console.log(
+    JSON.stringify(
+        allActivities[0],
+        null,
+        2
+    )
+);
+
+console.log(
+    "========================================"
+);
+
+
         // ====================================================
         // 5. KEEP ONLY CYCLING ACTIVITIES
         // ====================================================
 
-        const activities = allActivities.filter(
-            (activity) =>
-                activity.type === "Ride" ||
-                activity.type === "VirtualRide"
-        );
+        // const activities = allActivities.filter(
+        //     (activity) =>
+        //         activity.type === "Ride" ||
+        //         activity.type === "VirtualRide"
+        // );
+
+        const activities = allActivities;
 
 
         console.log(
@@ -345,8 +364,14 @@ console.log(
         );
 
         console.log(
-            `Cycling activities found: ${activities.length}`
-        );
+    "RAW ACTIVITIES:",
+    allActivities.length
+);
+
+console.log(
+    "ACTIVITIES WE WILL PROCESS:",
+    activities.length
+);
 
 
         // ====================================================

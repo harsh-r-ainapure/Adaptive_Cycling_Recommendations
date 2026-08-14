@@ -4,68 +4,152 @@ import fs from "fs/promises";
 import path from "path";
 import { spawn } from "child_process";
 
-function runPython(scriptPath, userId) {
+
+// ============================================================
+// RUN PYTHON SCRIPT
+// ============================================================
+
+function runPython(scriptPath, ...args) {
+
     return new Promise((resolve, reject) => {
 
+        const pythonCommand =
+            process.platform === "win32" ? "py" : "python3";
+
         const pythonProcess = spawn(
-            process.platform === "win32" ? "py" : "python",
-            [scriptPath, userId]
+            pythonCommand,
+            [scriptPath, ...args]
         );
 
-        pythonProcess.stdout.on("data", data => {
+        let stderr = "";
+
+        pythonProcess.stdout.on("data", (data) => {
             console.log(data.toString());
         });
 
-        pythonProcess.stderr.on("data", data => {
-            console.error(data.toString());
+        pythonProcess.stderr.on("data", (data) => {
+
+            const message = data.toString();
+
+            stderr += message;
+
+            console.error(message);
         });
 
-        pythonProcess.on("close", code => {
-            if (code === 0)
+        pythonProcess.on("error", (error) => {
+            reject(error);
+        });
+
+        pythonProcess.on("close", (code) => {
+
+            if (code === 0) {
+
                 resolve();
-            else
-                reject(new Error(`${scriptPath} exited with code ${code}`));
+
+            } else {
+
+                reject(
+                    new Error(
+                        `${path.basename(scriptPath)} exited with code ${code}\n${stderr}`
+                    )
+                );
+
+            }
+
         });
 
-        pythonProcess.on("error", reject);
     });
+
 }
+
+
+// ============================================================
+// SYNC ACTIVITIES
+// ============================================================
 
 const syncActivities = async (req, res) => {
 
+    let tempFolder = null;
+
     try {
+
+        // ====================================================
+        // 1. GET LOGGED-IN USER
+        // ====================================================
 
         const userID = req.user.id;
 
-        const profileResult = await pool.query(
-`
-SELECT
-    has_power_meter,
-    power_meter_month,
-    power_meter_year
-FROM users
-WHERE id = $1
-`,
-[userID]
-);
+        console.log(
+            `Starting activity sync for user: ${userID}`
+        );
 
-const profile = profileResult.rows[0];
 
-        // Get access token
-        const tokenResult = await pool.query(
+        // ====================================================
+        // 2. GET USER'S INTERVALS ACCOUNT DETAILS
+        // ====================================================
+
+        const userResult = await pool.query(
             `
-            SELECT access_token
+            SELECT
+                intervals_id,
+                access_token,
+                has_power_meter,
+                power_meter_month,
+                power_meter_year
             FROM users
             WHERE id = $1
             `,
             [userID]
         );
 
-        const access_token = tokenResult.rows[0].access_token;
 
-        const today = new Date().toISOString().split("T")[0];
+        if (userResult.rows.length === 0) {
 
-        // Check if activities already exist
+            return res.status(404).json({
+                message: "User not found."
+            });
+
+        }
+
+
+        const user = userResult.rows[0];
+
+        const intervalsId = user.intervals_id;
+        const accessToken = user.access_token;
+
+
+        if (!intervalsId) {
+
+            return res.status(400).json({
+                message: "Intervals.icu account is not connected."
+            });
+
+        }
+
+
+        if (!accessToken) {
+
+            return res.status(400).json({
+                message: "Intervals.icu access token is missing."
+            });
+
+        }
+
+
+        console.log(
+            `Intervals athlete ID: ${intervalsId}`
+        );
+
+
+        // ====================================================
+        // 3. DETERMINE DATE RANGE
+        // ====================================================
+
+        const today = new Date()
+            .toISOString()
+            .split("T")[0];
+
+
         const activityCountResult = await pool.query(
             `
             SELECT COUNT(*) AS count
@@ -75,30 +159,45 @@ const profile = profileResult.rows[0];
             [userID]
         );
 
-        const activityCount = Number(activityCountResult.rows[0].count);
+
+        const activityCount =
+            Number(activityCountResult.rows[0].count);
+
 
         let oldest;
 
+
+        // ----------------------------------------------------
+        // FIRST SYNC
+        // ----------------------------------------------------
+
         if (activityCount === 0) {
 
-             if (
-        profile &&
-    profile.has_power_meter &&
-    profile.power_meter_month != null &&
-    profile.power_meter_year != null
-    ) {
+            if (
+                user.has_power_meter &&
+                user.power_meter_month != null &&
+                user.power_meter_year != null
+            ) {
 
-        oldest =
-            `${profile.power_meter_year}-` +
-            `${String(profile.power_meter_month).padStart(2, "0")}-01`;
+                oldest =
+                    `${user.power_meter_year}-` +
+                    `${String(user.power_meter_month).padStart(2, "0")}-01`;
 
-    } else {
+            } else {
 
-        oldest = "2020-11-19";
+                // Historical fallback
+                oldest = "2020-11-19";
 
-    }
+            }
 
-        } else {
+        }
+
+
+        // ----------------------------------------------------
+        // INCREMENTAL SYNC
+        // ----------------------------------------------------
+
+        else {
 
             const latestResult = await pool.query(
                 `
@@ -109,231 +208,591 @@ const profile = profileResult.rows[0];
                 [userID]
             );
 
-            oldest = latestResult.rows[0].latest
-    .toISOString()
-    .split("T")[0];
+
+            const latest =
+                latestResult.rows[0].latest;
+
+
+            if (latest) {
+
+                const latestDate = new Date(latest);
+
+                // Go back one day so we don't miss
+                // activities around the boundary.
+                latestDate.setDate(
+                    latestDate.getDate() - 1
+                );
+
+                oldest = latestDate
+                    .toISOString()
+                    .split("T")[0];
+
+            } else {
+
+                oldest = "2020-11-19";
+
+            }
 
         }
 
-        // Download summaries
-        const summaryResponse = await axios.get(
-            "https://intervals.icu/api/v1/athlete/0/activities",
-            {
-                headers: {
-                    Authorization: `Bearer ${access_token}`
-                },
-                params: {
-                    oldest,
-                    newest: today
-                }
-            }
-        );
-
-        const activities = summaryResponse.data.filter(activity =>
-    activity.type === "Ride" ||
-    activity.type === "VirtualRide"
-);
 
         console.log(
-    `Fetched ${activities.length} activities`
-);
+            `Fetching activities from ${oldest} to ${today}`
+        );
 
-        for (const activity of activities) {
 
-    await pool.query(
-        `
-        INSERT INTO activities
-(
-    user_id,
-    intervals_activity_id,
-    activity_date,
-    distance,
-    moving_time,
-    elapsed_time,
-    average_speed,
-    average_power,
-    average_hr,
-    max_hr,
-    average_cadence,
-    elevation_gain,
-    elevation_loss,
-    raw_data
-)
-VALUES
-(
-    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
-)
-ON CONFLICT (user_id, intervals_activity_id)
-DO UPDATE SET
-    activity_date = EXCLUDED.activity_date,
-    distance = EXCLUDED.distance,
-    moving_time = EXCLUDED.moving_time,
-    elapsed_time = EXCLUDED.elapsed_time,
-    average_speed = EXCLUDED.average_speed,
-    average_power = EXCLUDED.average_power,
-    average_hr = EXCLUDED.average_hr,
-    max_hr = EXCLUDED.max_hr,
-    average_cadence = EXCLUDED.average_cadence,
-    elevation_gain = EXCLUDED.elevation_gain,
-    elevation_loss = EXCLUDED.elevation_loss,
-    raw_data = EXCLUDED.raw_data;
-        `,
-        [
-            userID,
-            activity.id,
-            activity.start_date,
-            activity.distance,
-            activity.moving_time,
-            activity.elapsed_time,
-            activity.average_speed,
-            activity.icu_average_watts,
-            activity.average_heartrate,
-            activity.max_heartrate,
-            activity.average_cadence,
-            activity.total_elevation_gain,
-            activity.total_elevation_loss,
-            JSON.stringify(activity)
-        ]
-    );
+        // ====================================================
+        // 4. FETCH ACTIVITIES FROM INTERVALS
+        // ====================================================
 
-}
-        // Check whether features already exist
-       
+        let summaryResponse;
+
+
+        try {
+
+            summaryResponse = await axios.get(
+                `https://intervals.icu/api/v1/athlete/${intervalsId}/activities`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`
+                    },
+
+                    params: {
+                        oldest,
+                        newest: today
+                    },
+
+                    timeout: 60000
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                "Intervals API request failed:"
+            );
+
+            if (error.response) {
+
+                console.error(
+                    "Status:",
+                    error.response.status
+                );
+
+                console.error(
+                    "Response:",
+                    error.response.data
+                );
+
+            } else {
+
+                console.error(
+                    error.message
+                );
+
+            }
+
+
+            return res.status(502).json({
+                message: "Failed to fetch activities from Intervals.icu."
+            });
+
+        }
+
+
+        const allActivities =
+            Array.isArray(summaryResponse.data)
+                ? summaryResponse.data
+                : [];
+
+
+        // ====================================================
+        // 5. KEEP ONLY CYCLING ACTIVITIES
+        // ====================================================
+
+        const activities = allActivities.filter(
+            (activity) =>
+                activity.type === "Ride" ||
+                activity.type === "VirtualRide"
+        );
+
+
+        console.log(
+            `Intervals returned ${allActivities.length} total activities`
+        );
+
+        console.log(
+            `Cycling activities found: ${activities.length}`
+        );
+
+
+        // ====================================================
+        // 6. NOTHING TO SYNC
+        // ====================================================
 
         if (activities.length === 0) {
 
-    return res.json({
-        message: "Already up to date."
-    });
-
-} 
-
-        // Create temp folder
-        const tempFolder = path.join("temp", userID);
-
-        await fs.mkdir(tempFolder, {
-            recursive: true
-        });
-
-        // Download FIT files
-        for (const activity of activities) {
-
-            const fitResponse = await axios.get(
-                `https://intervals.icu/api/v1/activity/${activity.id}/file`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${access_token}`
-                    },
-                    responseType: "arraybuffer"
-                }
-            );
-
-            console.log(fitResponse.headers["content-type"]);
-console.log(fitResponse.data.length);
-
-            const fitPath = path.join(
-                tempFolder,
-                `${activity.id}.fit`
-            );
-
-            await fs.writeFile(
-                fitPath,
-                fitResponse.data
-            );
-
-           console.log("Saved:", fitPath);
+            return res.status(200).json({
+                message:
+                    "No cycling activities found for the requested date range.",
+                fetched: 0,
+                inserted: 0
+            });
 
         }
 
-      const preprocessPath = path.join(
-    process.cwd(),
-    "python",
-    "preprocess.py"
-);
 
-        const scriptPath = path.join(
-    process.cwd(),
-    "python",
-    "features.py"
-);
+        // ====================================================
+        // 7. INSERT / UPDATE ACTIVITIES
+        // ====================================================
 
-await runPython(
-    preprocessPath,
-    userID
-);
-
-const python = spawn(
-    process.platform === "win32" ? "py" : "python",
-    [
-        scriptPath,
-        tempFolder,
-        userID
-    ]
-);
-
-python.stdout.on("data", (data) => {
-    console.log(data.toString());
-});
-
-python.stderr.on("data", (data) => {
-    console.error(data.toString());
-});
-
-python.on("error", (err) => {
-    console.error(err);
-});
-
-await new Promise((resolve, reject) => {
-
-    python.on("close", (code) => {
-
-        if (code === 0)
-            resolve();
-
-        else
-            reject(new Error(`Python exited with code ${code}`));
-
-    });
-
-});
+        let insertedCount = 0;
 
 
+        for (const activity of activities) {
 
-                // Delete temp folder
-        await fs.rm(tempFolder, {
-            recursive: true,
-            force: true
+            if (!activity.id) {
+
+                console.warn(
+                    "Skipping activity without an ID."
+                );
+
+                continue;
+
+            }
+
+
+            await pool.query(
+                `
+                INSERT INTO activities
+                (
+                    user_id,
+                    intervals_activity_id,
+                    activity_date,
+                    distance,
+                    moving_time,
+                    elapsed_time,
+                    average_speed,
+                    average_power,
+                    average_hr,
+                    max_hr,
+                    average_cadence,
+                    elevation_gain,
+                    elevation_loss,
+                    raw_data
+                )
+                VALUES
+                (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8,
+                    $9,
+                    $10,
+                    $11,
+                    $12,
+                    $13,
+                    $14
+                )
+
+                ON CONFLICT
+                (
+                    user_id,
+                    intervals_activity_id
+                )
+
+                DO UPDATE SET
+
+                    activity_date =
+                        EXCLUDED.activity_date,
+
+                    distance =
+                        EXCLUDED.distance,
+
+                    moving_time =
+                        EXCLUDED.moving_time,
+
+                    elapsed_time =
+                        EXCLUDED.elapsed_time,
+
+                    average_speed =
+                        EXCLUDED.average_speed,
+
+                    average_power =
+                        EXCLUDED.average_power,
+
+                    average_hr =
+                        EXCLUDED.average_hr,
+
+                    max_hr =
+                        EXCLUDED.max_hr,
+
+                    average_cadence =
+                        EXCLUDED.average_cadence,
+
+                    elevation_gain =
+                        EXCLUDED.elevation_gain,
+
+                    elevation_loss =
+                        EXCLUDED.elevation_loss,
+
+                    raw_data =
+                        EXCLUDED.raw_data
+                `,
+                [
+                    userID,
+
+                    activity.id,
+
+                    activity.start_date || null,
+
+                    activity.distance || null,
+
+                    activity.moving_time || null,
+
+                    activity.elapsed_time || null,
+
+                    activity.average_speed || null,
+
+                    activity.icu_average_watts || null,
+
+                    activity.average_heartrate || null,
+
+                    activity.max_heartrate || null,
+
+                    activity.average_cadence || null,
+
+                    activity.total_elevation_gain || null,
+
+                    activity.total_elevation_loss || null,
+
+                    JSON.stringify(activity)
+                ]
+            );
+
+
+            insertedCount++;
+
+        }
+
+
+        console.log(
+            `Inserted/updated ${insertedCount} activities`
+        );
+
+
+        // ====================================================
+        // 8. CREATE TEMP DIRECTORY FOR FIT FILES
+        // ====================================================
+
+        tempFolder = path.join(
+            process.cwd(),
+            "temp",
+            userID
+        );
+
+
+        await fs.mkdir(
+            tempFolder,
+            {
+                recursive: true
+            }
+        );
+
+
+        console.log(
+            `FIT temporary folder: ${tempFolder}`
+        );
+
+
+        // ====================================================
+        // 9. DOWNLOAD FIT FILES
+        // ====================================================
+
+        let fitCount = 0;
+
+
+        for (const activity of activities) {
+
+            if (!activity.id) {
+                continue;
+            }
+
+
+            try {
+
+                const fitResponse = await axios.get(
+                    `https://intervals.icu/api/v1/activity/${activity.id}/file`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`
+                        },
+
+                        responseType: "arraybuffer",
+
+                        timeout: 60000
+                    }
+                );
+
+
+                const fitPath = path.join(
+                    tempFolder,
+                    `${activity.id}.fit`
+                );
+
+
+                await fs.writeFile(
+                    fitPath,
+                    fitResponse.data
+                );
+
+
+                fitCount++;
+
+
+                console.log(
+                    `Saved FIT: ${activity.id}.fit`
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    `Failed to download FIT for activity ${activity.id}:`,
+                    error.response?.status ||
+                    error.message
+                );
+
+            }
+
+        }
+
+
+        console.log(
+            `Downloaded ${fitCount} FIT files`
+        );
+
+
+        // ====================================================
+        // 10. RUN FEATURE PREPROCESSING
+        // ====================================================
+
+        const preprocessPath = path.join(
+            process.cwd(),
+            "python",
+            "preprocess.py"
+        );
+
+
+        console.log(
+            "Running preprocess.py..."
+        );
+
+
+        await runPython(
+            preprocessPath,
+            userID
+        );
+
+
+        // ====================================================
+        // 11. EXTRACT FEATURES FROM FIT FILES
+        // ====================================================
+
+        const featuresPath = path.join(
+            process.cwd(),
+            "python",
+            "features.py"
+        );
+
+
+        console.log(
+            "Running features.py..."
+        );
+
+
+        await runPython(
+            featuresPath,
+            tempFolder,
+            userID
+        );
+
+
+        // ====================================================
+        // 12. RUN FATIGUE MODEL
+        // ====================================================
+
+        const fatiguePath = path.join(
+            process.cwd(),
+            "python",
+            "fatigue.py"
+        );
+
+
+        console.log(
+            "Running fatigue.py..."
+        );
+
+
+        await runPython(
+            fatiguePath,
+            userID
+        );
+
+
+        // ====================================================
+        // 13. RUN CAPACITY MODEL
+        // ====================================================
+
+        const capacityPath = path.join(
+            process.cwd(),
+            "python",
+            "capacities.py"
+        );
+
+
+        console.log(
+            "Running capacities.py..."
+        );
+
+
+        await runPython(
+            capacityPath,
+            userID
+        );
+
+
+        // ====================================================
+        // 14. RUN SEVERITY MODEL
+        // ====================================================
+
+        const severityPath = path.join(
+            process.cwd(),
+            "python",
+            "severity.py"
+        );
+
+
+        console.log(
+            "Running severity.py..."
+        );
+
+
+        await runPython(
+            severityPath,
+            userID
+        );
+
+
+        // ====================================================
+        // 15. RUN RECOMMENDATION MODEL
+        // ====================================================
+
+        const recommendationPath = path.join(
+            process.cwd(),
+            "python",
+            "recommendation.py"
+        );
+
+
+        console.log(
+            "Running recommendation.py..."
+        );
+
+
+        await runPython(
+            recommendationPath,
+            userID
+        );
+
+
+        // ====================================================
+        // 16. SUCCESS
+        // ====================================================
+
+        console.log(
+            "Activity sync and ML pipeline completed successfully."
+        );
+
+
+        return res.status(200).json({
+
+            message:
+                "Sync and analysis completed successfully.",
+
+            fetched: activities.length,
+
+            activities_processed: insertedCount,
+
+            fit_files_downloaded: fitCount
+
         });
-   
-        
-        const scriptPath1 = path.join(process.cwd(), "python", "fatigue.py");
-        const scriptPath2 = path.join(process.cwd(), "python", "capacities.py");
-        const scriptPath3 = path.join(process.cwd(), "python", "severity.py");
-        const scriptPath4 = path.join(process.cwd(), "python", "recommendation.py");
 
-        
-        await runPython(scriptPath1, userID);
-        await runPython(scriptPath2, userID);
-        await runPython(scriptPath3, userID);
-        await runPython(scriptPath4, userID);
-
-
-        res.json({
-            message: "Sync completed successfully."
-        });
 
     } catch (err) {
 
+        console.error(
+            "Sync failed:"
+        );
+
         console.error(err);
 
-        res.status(500).json({
-            message: "Sync failed."
+
+        return res.status(500).json({
+
+            message:
+                "Sync failed.",
+
+            error:
+                process.env.NODE_ENV === "production"
+                    ? undefined
+                    : err.message
+
         });
 
-    } 
+
+    } finally {
+
+        // ====================================================
+        // ALWAYS DELETE TEMP FIT FILES
+        // ====================================================
+
+        if (tempFolder) {
+
+            try {
+
+                await fs.rm(
+                    tempFolder,
+                    {
+                        recursive: true,
+                        force: true
+                    }
+                );
+
+
+                console.log(
+                    "Temporary FIT files deleted."
+                );
+
+
+            } catch (cleanupError) {
+
+                console.error(
+                    "Failed to clean temporary FIT files:",
+                    cleanupError.message
+                );
+
+            }
+
+        }
+
+    }
 
 };
-
 
 
 export {

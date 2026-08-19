@@ -72,6 +72,39 @@ for file in os.listdir(temp_folder):
 
 df_fit = pd.concat(csv_list, ignore_index=True)
 
+# ------------------------------------------------------------
+# GUARANTEE REQUIRED SENSOR COLUMNS EXIST
+# ------------------------------------------------------------
+# Each FIT file only contains whatever fields the device actually
+# recorded. If every activity in this batch lacks a given field
+# (e.g. no power meter was paired), pandas never creates that
+# column in df_fit at all - it's not NaN, it's simply missing.
+# Every groupby/agg call below that references these columns
+# unconditionally will throw a KeyError in that case.
+#
+# Filling them in as all-NaN here means those activities will
+# naturally get filtered out downstream (e.g. by the
+# Power_Availability_Percent > 10 check) instead of crashing
+# the whole sync.
+# ------------------------------------------------------------
+
+required_fit_columns = [
+    "power",
+    "distance",
+    "altitude",
+    "enhanced_speed",
+    "cadence",
+    "heart_rate",
+]
+
+for col in required_fit_columns:
+
+    if col not in df_fit.columns:
+
+        print(f"Warning: '{col}' not present in this batch's FIT data, filling with NaN.")
+
+        df_fit[col] = np.nan
+
 query = """
 SELECT *
 FROM activities

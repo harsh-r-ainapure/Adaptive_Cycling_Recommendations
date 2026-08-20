@@ -175,6 +175,33 @@ df_fit = df_fit[df_fit["Activity ID"].isin(valid_id)]
 df.info()
 df_fit.info()
 
+# ------------------------------------------------------------
+# EXIT EARLY IF NOTHING SURVIVED THE POWER FILTER
+# ------------------------------------------------------------
+# Every groupby/apply call below assumes at least one row of
+# data exists. On an empty dataframe, pandas can't always infer
+# whether a lambda returns a scalar or a DataFrame (there's no
+# data to test it on), which causes confusing type errors like
+# reset_index(name=...) failing because .apply() unexpectedly
+# returned a DataFrame instead of a Series.
+#
+# Rather than defensively patching every downstream call, we
+# just stop here cleanly if this batch has no valid activities
+# left to process. This is expected/normal behavior (e.g. a
+# batch containing only a run or a ride with no power meter),
+# not a failure - so we exit with code 0, not an error.
+# ------------------------------------------------------------
+
+if df.empty:
+
+    print("No activities in this batch passed the power-availability filter. Nothing to process, exiting cleanly.")
+
+    cursor = conn.cursor()
+    cursor.close()
+    conn.close()
+
+    sys.exit(0)
+
 df = df.sort_values(
     "Activity Date"
 ).reset_index(drop=True)

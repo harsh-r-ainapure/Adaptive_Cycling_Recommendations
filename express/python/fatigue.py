@@ -81,8 +81,7 @@ df = df_activity.merge(
     how="inner"
 )
 
-
-X = df[[
+FEATURE_COLUMNS = [
     "Gradient",
     "Average Cadence",
     "Average Heart Rate",
@@ -97,7 +96,28 @@ X = df[[
     "Power_Zone_Percent",
     "Recovery_Zone_Percent",
     "baseline_hr",
-]]
+]
+
+before_count = len(df)
+
+df = df.dropna(subset=FEATURE_COLUMNS + ["Average Watts"])
+
+dropped_count = before_count - len(df)
+
+if dropped_count > 0:
+    print(f"Dropped {dropped_count} row(s) with missing feature/power data.")
+
+MIN_ROWS_FOR_TRAINING = 5
+
+if len(df) < MIN_ROWS_FOR_TRAINING:
+    print(
+        f"Only {len(df)} valid rows after filtering, "
+        f"need at least {MIN_ROWS_FOR_TRAINING}. Skipping model training."
+    )
+    conn.close()
+    sys.exit(0)
+
+X = df[FEATURE_COLUMNS]
 
 Y = df["Average Watts"]
 

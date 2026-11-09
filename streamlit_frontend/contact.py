@@ -2,13 +2,15 @@ import streamlit as st
 
 def show_contact_page():
     st.markdown("""
-        <div style="margin-bottom: 24px;">
-            <span class="badge-primary">Get in Touch</span>
-            <h1 style="margin: 8px 0 0 0; font-size: 2.2rem; font-weight: 800; color: #F8FAFC;">
-                ✉️ Contact & Support
+        <div style="border-left: 2px solid #FF4B00; padding-left: 16px; margin-bottom: 22px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
+                DISPATCH & INQUIRIES
+            </div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: #F8FAFC; margin: 4px 0 6px 0; letter-spacing: -0.02em;">
+                Contact & Support
             </h1>
-            <p style="color: #94A3B8; font-size: 1rem; margin-top: 6px;">
-                Have questions regarding the platform, privacy policies, or algorithm modeling?
+            <p style="color: #7A889B; font-size: 0.9rem; margin: 0;">
+                Direct inquiries concerning telemetry processing, privacy protocols, or model algorithms.
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -17,18 +19,20 @@ def show_contact_page():
 
     with col1:
         st.markdown("""
-        <div class="modern-card">
-            <h3 style="margin-top: 0; color: #F8FAFC; font-size: 1.15rem;">Support & Inquiries</h3>
-            <p style="color: #94A3B8; font-size: 0.95rem; line-height: 1.6;">
-                For questions regarding data handling practices, privacy inquiries, or developer collaboration, please reach out directly:
+        <div class="telemetry-panel">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 12px; font-weight: 600;">
+                Developer Inquiries
+            </div>
+            <p style="color: #94A3B8; font-size: 0.88rem; line-height: 1.6; margin-bottom: 18px;">
+                For technical issues, data correction, or privacy inquiries regarding your profile, contact the maintainer directly:
             </p>
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 18px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="background: #07090E; border: 1px solid #161D2B; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <div style="font-size: 0.8rem; color: #64748B; font-weight: 600; text-transform: uppercase;">Direct Email</div>
-                    <div style="font-size: 1.05rem; font-weight: 600; color: #38BDF8; font-family: monospace;">harsh.ainapure@harshainapure.dev</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">Direct Contact</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.92rem; color: #38BDF8; margin-top: 2px;">harsh.ainapure@harshainapure.dev</div>
                 </div>
-                <a href="mailto:harsh.ainapure@harshainapure.dev" style="background: #1E293B; border: 1px solid rgba(255,255,255,0.15); color: #F8FAFC; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.85rem; font-weight: 600;">
-                    Send Email ➔
+                <a href="mailto:harsh.ainapure@harshainapure.dev" style="background: #111722; border: 1px solid #1E283A; color: #F8FAFC; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 0.8rem; font-weight: 500;">
+                    Compose Email
                 </a>
             </div>
         </div>
@@ -36,12 +40,12 @@ def show_contact_page():
 
     with col2:
         st.markdown("""
-        <div style="background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px;">
-            <div style="font-weight: 700; color: #F8FAFC; margin-bottom: 8px; font-size: 1rem;">
-                🛡️ Open Privacy Inquiries
+        <div class="telemetry-panel">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 12px; font-weight: 600;">
+                Data Deletion Requests
             </div>
-            <p style="color: #94A3B8; font-size: 0.85rem; line-height: 1.5; margin: 0;">
-                Users can request activity data exports or deletion of stored profile calibration records at any time.
+            <p style="color: #94A3B8; font-size: 0.82rem; line-height: 1.5; margin: 0;">
+                Athletes retain full rights to request complete purging of their synchronized activity telemetry and calibrated sensor configurations.
             </p>
         </div>
         """, unsafe_allow_html=True)

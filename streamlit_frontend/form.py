@@ -11,37 +11,42 @@ def show_form_page():
 
     # Header
     st.markdown("""
-        <div style="margin-bottom: 24px;">
-            <span class="badge-primary">Profile Calibration</span>
-            <h1 style="margin: 8px 0 0 0; font-size: 2.2rem; font-weight: 800; color: #F8FAFC;">
-                ⚙️ Athlete & Equipment Setup
+        <div style="border-left: 2px solid #FF4B00; padding-left: 16px; margin-bottom: 22px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
+                HARDWARE & ATHLETE CALIBRATION
+            </div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: #F8FAFC; margin: 4px 0 6px 0; letter-spacing: -0.02em;">
+                Sensor Profile Setup
             </h1>
-            <p style="color: #94A3B8; font-size: 1rem; margin-top: 6px;">
-                Calibrate your baseline calculations by specifying your power meter history and profile details.
+            <p style="color: #7A889B; font-size: 0.9rem; margin: 0;">
+                Calibrate baseline telemetry calculations by configuring strain gauge hardware timeline and athlete metadata.
             </p>
         </div>
     """, unsafe_allow_html=True)
 
     if not is_connected:
-        st.warning("⚠️ You are not yet connected to Intervals.icu. You can fill the form, but submitting requires an active connection.")
+        st.info("Intervals.icu account is unlinked. You can complete the profile now, but saving requires an authenticated session.")
 
-    # Form in a modern centered card layout
-    form_col1, form_col2 = st.columns([7, 3], gap="large")
+    form_col, info_col = st.columns([7, 4], gap="large")
 
-    with form_col1:
+    with form_col:
         default_name = st.session_state.get("user_name", "")
 
         with st.form("setup_form", border=True):
-            st.markdown("<h3 style='font-size: 1.15rem; font-weight: 700; color: #F8FAFC; margin-bottom: 16px;'>Rider Details</h3>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 12px; font-weight: 600;">
+                Profile Parameters
+            </div>
+            """, unsafe_allow_html=True)
 
             name = st.text_input(
-                "Athlete Full Name",
+                "Athlete Name",
                 value=default_name,
-                placeholder="e.g. Harsh Ainapure",
-                help="Your display name used in dashboard metrics."
+                placeholder="Enter full name",
+                help="Identifier associated with dashboard telemetry."
             )
 
-            st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
             power_options = ["Yes", "No", "I'm not sure"]
             default_power_idx = 1
@@ -50,10 +55,10 @@ def show_form_page():
                 default_power_idx = power_options.index(saved_has_power)
 
             has_power = st.radio(
-                "Do your recorded rides contain power meter data (Watts)?",
+                "Do your recorded activities contain strain gauge power meter data (Watts)?",
                 power_options,
                 index=default_power_idx,
-                help="Power meters provide true mechanical work output, which enhances ML model predictions."
+                help="True mechanical power readings enhance the Random Forest model's training accuracy."
             )
 
             start_month = None
@@ -65,13 +70,12 @@ def show_form_page():
             ]
 
             if has_power == "Yes":
-                st.divider()
-                st.markdown(
-                    "<div style='font-weight: 600; color: #F1F5F9; margin-bottom: 10px; font-size: 0.95rem;'>"
-                    "📅 Approximately when did you start recording power?"
-                    "</div>",
-                    unsafe_allow_html=True
-                )
+                st.markdown("<hr style='margin: 16px 0;'>", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #CBD5E1; text-transform: uppercase; margin-bottom: 8px;">
+                    Hardware Timeline // Approximate power meter installation date
+                </div>
+                """, unsafe_allow_html=True)
 
                 col_m, col_y = st.columns(2)
                 current_year = datetime.datetime.now().year
@@ -84,25 +88,25 @@ def show_form_page():
                 y_idx = years.index(saved_y_val) if (saved_y_val and saved_y_val in years) else 0
 
                 with col_m:
-                    start_month = st.selectbox("Starting Month", months, index=m_idx)
+                    start_month = st.selectbox("Month", months, index=m_idx)
                 with col_y:
-                    start_year = st.selectbox("Starting Year", years, index=y_idx)
+                    start_year = st.selectbox("Year", years, index=y_idx)
 
-            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
             submitted = st.form_submit_button(
-                "Save Profile & Calibrate ➔",
+                "Commit Calibration Profile",
                 type="primary",
                 use_container_width=True
             )
 
         if submitted:
             if not name.strip():
-                st.error("Please enter your name.")
+                st.error("Athlete name cannot be blank.")
                 st.stop()
 
             if not jwt:
-                st.error("Please connect your Intervals.icu account on the Sync page before saving.")
+                st.error("Authentication required. Please connect your Intervals.icu account on the Sync page before saving.")
                 st.stop()
 
             month_number = None
@@ -120,7 +124,7 @@ def show_form_page():
             }
 
             try:
-                with st.spinner("Saving athlete profile to backend..."):
+                with st.spinner("Writing calibration parameters to database..."):
                     response = requests.post(
                         f"{BACKEND}/api/user/profile",
                         json=payload,
@@ -131,7 +135,7 @@ def show_form_page():
                     )
                     response.raise_for_status()
 
-                st.success("Profile calibrated and saved successfully!")
+                st.success("Calibration profile committed successfully.")
                 st.session_state["user_name"] = name.strip()
                 st.session_state["has_power"] = has_power
                 st.session_state["power_start_month"] = month_number
@@ -141,22 +145,23 @@ def show_form_page():
                 st.rerun()
 
             except requests.exceptions.HTTPError:
-                st.error(f"Error from server: {response.text}")
+                st.error(f"Server response error: {response.text}")
             except Exception as e:
-                st.error(f"Unable to save profile.\n\n{e}")
+                st.error(f"Unable to save calibration profile: {e}")
 
-    with form_col2:
+    with info_col:
         st.markdown("""
-        <div style="background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 20px;">
-            <div style="font-weight: 700; color: #F8FAFC; margin-bottom: 12px; font-size: 1rem;">
-                💡 Why Calibration Matters
+        <div class="telemetry-panel">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 12px; font-weight: 600;">
+                Calibration Rationale
             </div>
-            <p style="color: #94A3B8; font-size: 0.85rem; line-height: 1.5; margin-bottom: 14px;">
-                Knowing when you equipped a power meter allows our Random Forest model to accurately differentiate between actual measured watts and estimated metrics.
+            <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.5; margin-bottom: 14px;">
+                Knowing the exact month and year when a direct-force power meter was installed enables the feature engineering pipeline to differentiate true recorded work from calculated estimates.
             </p>
-            <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; margin-top: 12px;">
-                <div style="font-size: 0.8rem; font-weight: 600; color: #FC4C02;">Next Step:</div>
-                <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 4px;">Once saved, navigate to Sync to pull your ride files into the database.</div>
+            <div style="border-top: 1px solid #161D2B; padding-top: 12px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
+                    SUBSEQUENT ACTION: Proceed to Sync to fetch historical rides and train the baseline model.
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)

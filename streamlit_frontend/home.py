@@ -6,161 +6,168 @@ def show_homepage():
     jwt = st.session_state.get("jwt")
     is_connected = bool(jwt)
 
-    # Top Header Bar: Status & Logout
-    top_col1, top_col2 = st.columns([6, 2])
-    with top_col1:
-        if is_connected:
-            st.markdown(
-                '<div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">'
-                '<span class="status-pill online">● Intervals.icu Connected</span>'
-                '</div>',
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                '<div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">'
-                '<span class="status-pill offline">○ No Account Connected</span>'
-                '</div>',
-                unsafe_allow_html=True
-            )
-    with top_col2:
-        if is_connected:
-            if st.button("Sign Out", use_container_width=True):
-                st.session_state["jwt"] = None
-                st.success("Signed out successfully.")
-                st.rerun()
-        else:
-            if st.button("Reset Session", use_container_width=True):
-                st.session_state["jwt"] = None
-                st.info("Session reset.")
-                st.rerun()
-
-    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-
-    # Hero Banner
-    hero_col_text, hero_col_logo = st.columns([3, 1])
-    with hero_col_text:
+    # Top Telemetry Status Header
+    hud_c1, hud_c2 = st.columns([7, 2])
+    with hud_c1:
+        status_tag = '<span class="tech-tag live">LINKED // INTERVALS.ICU</span>' if is_connected else '<span class="tech-tag">UNLINKED // INTERVALS.ICU</span>'
         st.markdown(f"""
-        <div class="hero-banner">
-            <span class="badge-primary">AI-Powered Cycling Intelligence</span>
-            <h1 class="hero-title" style="margin-top: 12px;">Welcome back, {user_name}!</h1>
-            <p class="hero-subtitle">
-                Adaptive training intelligence driven by machine learning and physiological fatigue modeling.
-                Analyze your ride dynamics, track capacity deviations, and unlock personalized training recommendations.
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
+            <span class="tech-tag">ATHLETE: {user_name.upper()}</span>
+            {status_tag}
+            <span class="tech-tag">ENGINE: RF-PREDICTIVE</span>
+        </div>
+        """, unsafe_allow_html=True)
+    with hud_c2:
+        if is_connected:
+            if st.button("Disconnect Session", use_container_width=True):
+                st.session_state["jwt"] = None
+                st.rerun()
+        else:
+            if st.button("Reset Session State", use_container_width=True):
+                st.session_state["jwt"] = None
+                st.rerun()
+
+    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
+
+    # Minimalist Header Section
+    header_col, logo_col = st.columns([5, 1])
+    with header_col:
+        st.markdown("""
+        <div style="border-left: 2px solid #FF4B00; padding-left: 18px; margin-bottom: 28px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
+                ENDURANCE TELEMETRY PLATFORM
+            </div>
+            <h1 style="font-size: 2.2rem; font-weight: 700; color: #F8FAFC; margin: 6px 0 8px 0; letter-spacing: -0.02em;">
+                Adaptive Cycling Intelligence
+            </h1>
+            <p style="color: #7A889B; font-size: 0.92rem; max-width: 680px; margin: 0; line-height: 1.5;">
+                Physiological fatigue modeling and machine-learned capacity reconstitution. Select an operational module below to inspect telemetry or trigger activity ingestion.
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-    with hero_col_logo:
+    with logo_col:
         BASE_DIR = Path(__file__).parent
         logo_path = BASE_DIR / "stravalogo.png"
         if logo_path.exists():
-            st.markdown('<div style="text-align: center; padding-top: 20px;">', unsafe_allow_html=True)
-            st.image(str(logo_path), caption="Powered by Intervals & Strava", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.image(str(logo_path), caption="Integration: Intervals & Strava", use_container_width=True)
 
-    # Section Title
+    # Modular Workspace Grid
     st.markdown("""
-        <div class="section-title">
-            <span>⚡ Quick Modules</span>
-        </div>
-        <div class="section-subtitle">
-            Choose an action to manage your data, configure your baseline, or view AI insights.
-        </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; color: #64748B; text-transform: uppercase; margin-bottom: 12px;">
+        OPERATIONAL MODULES
+    </div>
     """, unsafe_allow_html=True)
 
-    # Module Cards Grid (2x2)
-    row1_col1, row1_col2 = st.columns(2)
+    m1, m2 = st.columns(2, gap="medium")
 
-    with row1_col1:
+    with m1:
         st.markdown("""
-        <div class="feature-card">
+        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
-                <div class="feature-icon" style="background: rgba(252, 76, 2, 0.15); color: #FC4C02;">🚴</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 1.15rem; font-weight: 700; color: #F8FAFC;">Adaptive Cycling Coach</h3>
-                <p style="color: #94A3B8; font-size: 0.9rem; line-height: 1.4; margin-bottom: 16px;">
-                    Review your baseline comparison, recommended distance, elevation targets, 6-month fatigue curves, and RF power predictions.
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Work Capacity & Recovery Coach</span>
+                    <span class="tech-tag active">CORE</span>
+                </div>
+                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
+                    Inspect rolling fatigue decay curves, baseline variance, and target prescriptions (distance, elevation, and heart rate caps) for upcoming training sessions.
                 </p>
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
+                STATUS: READY // 3 TELEMETRY TRACKS
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Open Coach Dashboard ➔", key="nav_coach", use_container_width=True):
+        if st.button("Launch Coach Terminal", key="btn_coach", type="primary", use_container_width=True):
             st.session_state["selected_page"] = "Adaptive Cycling Coach"
             st.rerun()
 
-    with row1_col2:
+    with m2:
         st.markdown("""
-        <div class="feature-card">
+        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
-                <div class="feature-icon" style="background: rgba(16, 185, 129, 0.15); color: #10B981;">🔄</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 1.15rem; font-weight: 700; color: #F8FAFC;">Sync Activities</h3>
-                <p style="color: #94A3B8; font-size: 0.9rem; line-height: 1.4; margin-bottom: 16px;">
-                    Connect Intervals.icu and OAuth providers to synchronize your latest workouts and trigger feature extraction pipeline.
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Data Pipeline & Activity Sync</span>
+                    <span class="tech-tag">INGEST</span>
+                </div>
+                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
+                    Authenticate with Intervals.icu to fetch raw workout streams, sensor channels, and power streams for feature extraction.
                 </p>
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
+                PROTOCOL: OAUTH2 // REST INGESTION
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Sync Activities ➔", key="nav_sync", use_container_width=True):
+        if st.button("Open Ingestion Hub", key="btn_sync", use_container_width=True):
             st.session_state["selected_page"] = "Sync"
             st.rerun()
 
-    st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-    row2_col1, row2_col2 = st.columns(2)
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+    m3, m4 = st.columns(2, gap="medium")
 
-    with row2_col1:
+    with m3:
         st.markdown("""
-        <div class="feature-card">
+        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
-                <div class="feature-icon" style="background: rgba(56, 189, 248, 0.15); color: #38BDF8;">⚙️</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 1.15rem; font-weight: 700; color: #F8FAFC;">Rider Setup Form</h3>
-                <p style="color: #94A3B8; font-size: 0.9rem; line-height: 1.4; margin-bottom: 16px;">
-                    Calibrate your athlete profile, power meter availability, and historical date tracking for accurate baseline metrics.
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Athlete Calibration & Sensors</span>
+                    <span class="tech-tag">CALIBRATE</span>
+                </div>
+                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
+                    Configure power meter hardware availability, installation timestamp, and athlete profile specifications for clean ML baseline labeling.
                 </p>
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
+                HARDWARE: STRAIN GAUGE CONFIG
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Edit Profile & Setup ➔", key="nav_form", use_container_width=True):
+        if st.button("Calibrate Parameters", key="btn_form", use_container_width=True):
             st.session_state["selected_page"] = "Setup Form"
             st.rerun()
 
-    with row2_col2:
+    with m4:
         st.markdown("""
-        <div class="feature-card">
+        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
-                <div class="feature-icon" style="background: rgba(168, 85, 247, 0.15); color: #A855F7;">💡</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 1.15rem; font-weight: 700; color: #F8FAFC;">Methodology & Science</h3>
-                <p style="color: #94A3B8; font-size: 0.9rem; line-height: 1.4; margin-bottom: 16px;">
-                    Learn how the machine learning fatigue algorithm, capacity deviation, and predictive modeling optimize athlete readiness.
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">System Architecture & Spec</span>
+                    <span class="tech-tag">DOCS</span>
+                </div>
+                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
+                    Technical documentation detailing the exponential decay fatigue engine, capacity deviation math, and Random Forest power regression.
                 </p>
+            </div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
+                SPEC: MATHEMATICAL MODELING
             </div>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Learn More About System ➔", key="nav_about", use_container_width=True):
+        if st.button("Read Technical Spec", key="btn_about", use_container_width=True):
             st.session_state["selected_page"] = "About"
             st.rerun()
 
-    st.divider()
+    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
 
-    # Quick Feature Highlights Ribbon
-    hl_col1, hl_col2, hl_col3 = st.columns(3)
-    with hl_col1:
-        st.markdown("""
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px;">
-            <div style="font-weight: 700; color: #F1F5F9; font-size: 0.9rem;">📈 Fatigue Tracking</div>
-            <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 4px;">6-month rolling fatigue modeling computed from normalized effort.</div>
+    # Technical Specs Ribbon
+    st.markdown("""
+    <div style="border-top: 1px solid #161D2B; padding-top: 18px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+        <div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">MODEL RUNTIME</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #CBD5E1; margin-top: 3px;">Scikit-Learn RF</div>
         </div>
-        """, unsafe_allow_html=True)
-    with hl_col2:
-        st.markdown("""
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px;">
-            <div style="font-weight: 700; color: #F1F5F9; font-size: 0.9rem;">🎯 Next-Ride Targets</div>
-            <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 4px;">Dynamic volume, climb, and heart rate targets adapted to current state.</div>
+        <div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">FATIGUE METRIC</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #CBD5E1; margin-top: 3px;">Exponential Half-Life</div>
         </div>
-        """, unsafe_allow_html=True)
-    with hl_col3:
-        st.markdown("""
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 14px;">
-            <div style="font-weight: 700; color: #F1F5F9; font-size: 0.9rem;">🤖 RF Power Predictions</div>
-            <div style="font-size: 0.8rem; color: #94A3B8; margin-top: 4px;">Machine learning estimated power compared directly with actual ride output.</div>
+        <div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">INGESTION SOURCE</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #CBD5E1; margin-top: 3px;">Intervals.icu API</div>
         </div>
-        """, unsafe_allow_html=True)
+        <div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">SAMPLING WINDOW</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #CBD5E1; margin-top: 3px;">180-Day Rolling</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)

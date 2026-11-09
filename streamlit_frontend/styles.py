@@ -1,424 +1,321 @@
 import streamlit as st
 
 def apply_custom_css():
-    """Injects modern, polished CSS styles into the Streamlit application."""
+    """Injects high-precision, minimalist endurance telemetry styling."""
     custom_css = """
     <style>
-    /* Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
+    /* Global Typography & Palette */
     html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    /* Overall Background and App Shell */
     .stApp {
-        background-color: #0B0F19;
-        color: #F3F4F6;
+        background-color: #07090E;
+        color: #E2E8F0;
     }
 
-    /* Top decoration bar */
+    /* Minimalist Technical Header */
     header[data-testid="stHeader"] {
-        background: rgba(11, 15, 25, 0.8) !important;
-        backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(7, 9, 14, 0.85) !important;
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid #161D2B;
     }
 
-    /* Sidebar Styling */
+    /* Precision Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #0F172A !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        background-color: #0A0D14 !important;
+        border-right: 1px solid #161D2B;
     }
 
     section[data-testid="stSidebar"] .stRadio > div {
-        gap: 6px;
+        gap: 3px;
     }
 
     section[data-testid="stSidebar"] .stRadio label {
-        padding: 8px 12px;
-        border-radius: 8px;
-        transition: all 0.2s ease-in-out;
+        padding: 7px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
         font-weight: 500;
-        color: #94A3B8;
+        letter-spacing: 0.02em;
+        color: #7A889B;
+        border: 1px solid transparent;
+        transition: all 0.15s ease-in-out;
     }
 
     section[data-testid="stSidebar"] .stRadio label:hover {
-        background-color: rgba(255, 255, 255, 0.05);
-        color: #F8FAFC;
+        background-color: #101622;
+        border-color: #1A2333;
+        color: #F1F5F9;
     }
 
-    /* Modern Card Containers */
-    .modern-card {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(16px);
-        margin-bottom: 20px;
-        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-
-    .modern-card:hover {
-        border-color: rgba(252, 76, 2, 0.4);
-        box-shadow: 0 14px 30px -4px rgba(252, 76, 2, 0.12), 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-    }
-
-    .metric-card {
-        background: linear-gradient(145deg, #131D31 0%, #0F172A 100%);
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        border-radius: 14px;
+    /* Telemetry HUD Cards */
+    .telemetry-card {
+        background: #0C1017;
+        border: 1px solid #171F2C;
+        border-radius: 8px;
         padding: 20px 22px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         position: relative;
-        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        transition: border-color 0.2s ease, transform 0.2s ease;
     }
 
-    .metric-card::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #FC4C02, #FF7A00);
-        opacity: 0.8;
+    .telemetry-card:hover {
+        border-color: #263347;
     }
 
-    .metric-card.baseline::before {
-        background: linear-gradient(90deg, #38BDF8, #6366F1);
-    }
-
-    .metric-card.success::before {
-        background: linear-gradient(90deg, #10B981, #059669);
-    }
-
-    .metric-label {
-        font-size: 0.85rem;
-        font-weight: 600;
+    .telemetry-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #94A3B8;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .metric-value {
-        font-size: 2rem;
-        font-weight: 800;
-        color: #F8FAFC;
-        line-height: 1.1;
-        letter-spacing: -0.02em;
-    }
-
-    .metric-unit {
-        font-size: 1rem;
-        font-weight: 500;
         color: #64748B;
-        margin-left: 4px;
+        margin-bottom: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
 
-    .metric-delta {
-        font-size: 0.875rem;
+    .telemetry-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 2.1rem;
         font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 4px 10px;
-        border-radius: 9999px;
-        margin-top: 10px;
+        color: #F8FAFC;
+        letter-spacing: -0.03em;
+        line-height: 1;
     }
 
-    .metric-delta.positive {
-        background-color: rgba(16, 185, 129, 0.15);
-        color: #34D399;
-        border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-
-    .metric-delta.negative {
-        background-color: rgba(239, 68, 68, 0.15);
-        color: #F87171;
-        border: 1px solid rgba(239, 68, 68, 0.3);
-    }
-
-    .metric-delta.neutral {
-        background-color: rgba(148, 163, 184, 0.15);
-        color: #CBD5E1;
-        border: 1px solid rgba(148, 163, 184, 0.3);
-    }
-
-    /* Badges & Pills */
-    .status-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 14px;
-        border-radius: 9999px;
+    .telemetry-unit {
+        font-family: 'Space Grotesk', sans-serif;
         font-size: 0.85rem;
-        font-weight: 600;
-        border: 1px solid transparent;
+        color: #718096;
+        margin-left: 5px;
+        font-weight: 500;
     }
 
-    .status-pill.online {
-        background: rgba(16, 185, 129, 0.15);
-        color: #10B981;
-        border-color: rgba(16, 185, 129, 0.3);
-    }
-
-    .status-pill.offline {
-        background: rgba(245, 158, 11, 0.15);
-        color: #F59E0B;
-        border-color: rgba(245, 158, 11, 0.3);
-    }
-
-    .badge-primary {
-        background: linear-gradient(135deg, rgba(252, 76, 2, 0.2), rgba(255, 122, 0, 0.1));
-        border: 1px solid rgba(252, 76, 2, 0.4);
-        color: #FC4C02;
-        font-weight: 600;
-        padding: 4px 10px;
-        border-radius: 6px;
+    .telemetry-indicator {
+        font-family: 'JetBrains Mono', monospace;
         font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 10px;
+        font-weight: 500;
+    }
+
+    .telemetry-indicator.positive {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10B981;
+        border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+
+    .telemetry-indicator.negative {
+        background: rgba(244, 63, 94, 0.1);
+        color: #F43F5E;
+        border: 1px solid rgba(244, 63, 94, 0.25);
+    }
+
+    .telemetry-indicator.neutral {
+        background: rgba(148, 163, 184, 0.08);
+        color: #94A3B8;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    /* Technical Tag / Monospace Badge */
+    .tech-tag {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        padding: 3px 8px;
+        border-radius: 4px;
+        background: #111722;
+        border: 1px solid #1E283A;
+        color: #94A3B8;
+        display: inline-block;
+    }
+
+    .tech-tag.active {
+        background: rgba(255, 75, 0, 0.1);
+        border-color: rgba(255, 75, 0, 0.35);
+        color: #FF4B00;
+    }
+
+    .tech-tag.live {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: rgba(16, 185, 129, 0.35);
+        color: #10B981;
     }
 
     /* Streamlit Containers Border Tuning */
     div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {
-        border-color: rgba(255, 255, 255, 0.08) !important;
-        border-radius: 16px !important;
-        background: rgba(17, 24, 39, 0.4);
-        backdrop-filter: blur(8px);
+        border-color: #161D2B !important;
+        border-radius: 8px !important;
+        background: #0B0E15;
     }
 
-    /* Buttons */
+    /* Buttons: Minimalist Industrial */
     .stButton > button {
-        border-radius: 10px !important;
+        border-radius: 6px !important;
+        font-family: 'Space Grotesk', sans-serif !important;
         font-weight: 600 !important;
-        letter-spacing: 0.01em !important;
-        padding: 0.5rem 1.25rem !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        background: #1E293B !important;
-        color: #F8FAFC !important;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.02em !important;
+        padding: 0.5rem 1rem !important;
+        border: 1px solid #1E2738 !important;
+        background: #0F141F !important;
+        color: #E2E8F0 !important;
+        transition: all 0.15s ease !important;
     }
 
     .stButton > button:hover {
-        background: #334155 !important;
-        border-color: rgba(252, 76, 2, 0.5) !important;
+        background: #172030 !important;
+        border-color: #2F3E56 !important;
         color: #FFFFFF !important;
-        box-shadow: 0 4px 12px rgba(252, 76, 2, 0.15);
-        transform: translateY(-1px);
     }
 
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #FC4C02 0%, #E03E00 100%) !important;
-        border: none !important;
-        color: white !important;
-        box-shadow: 0 4px 15px rgba(252, 76, 2, 0.3) !important;
+        background: #FF4B00 !important;
+        border: 1px solid #FF5E19 !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
     }
 
     .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #FF5E1E 0%, #E03E00 100%) !important;
-        box-shadow: 0 6px 20px rgba(252, 76, 2, 0.4) !important;
-        transform: translateY(-2px);
+        background: #E04200 !important;
+        border-color: #FF6E2E !important;
     }
 
     /* Link Button override */
     a[data-testid="stLinkButton"] {
-        border-radius: 10px !important;
+        border-radius: 6px !important;
+        font-family: 'Space Grotesk', sans-serif !important;
         font-weight: 600 !important;
-        background: linear-gradient(135deg, #FC4C02 0%, #D83F00 100%) !important;
-        border: none !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.02em !important;
+        background: #FF4B00 !important;
+        border: 1px solid #FF5E19 !important;
         color: white !important;
         text-align: center;
-        box-shadow: 0 4px 14px rgba(252, 76, 2, 0.25) !important;
-        transition: all 0.2s ease !important;
+        transition: all 0.15s ease !important;
     }
 
     a[data-testid="stLinkButton"]:hover {
-        background: linear-gradient(135deg, #FF6224 0%, #FC4C02 100%) !important;
-        box-shadow: 0 6px 18px rgba(252, 76, 2, 0.4) !important;
-        transform: translateY(-1px);
+        background: #E04200 !important;
         color: white !important;
     }
 
-    /* Inputs, Selectboxes & Forms */
+    /* Form Fields */
     .stTextInput input, .stSelectbox div[data-baseweb="select"] {
-        border-radius: 10px !important;
-        background-color: #111827 !important;
-        border-color: rgba(255, 255, 255, 0.1) !important;
-        color: #F8FAFC !important;
+        border-radius: 6px !important;
+        background-color: #0B0F17 !important;
+        border-color: #19212E !important;
+        color: #F1F5F9 !important;
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-size: 0.9rem !important;
     }
 
     .stTextInput input:focus {
-        border-color: #FC4C02 !important;
-        box-shadow: 0 0 0 1px #FC4C02 !important;
+        border-color: #FF4B00 !important;
+        box-shadow: none !important;
     }
 
-    /* Callouts / Alerts */
-    div[data-testid="stAlert"] {
-        border-radius: 12px !important;
-        border-width: 1px !important;
-        backdrop-filter: blur(8px);
-    }
-
-    /* Hero Section */
-    .hero-banner {
-        background: radial-gradient(circle at top right, rgba(252, 76, 2, 0.15), transparent 50%),
-                    radial-gradient(circle at bottom left, rgba(56, 189, 248, 0.1), transparent 50%),
-                    #111827;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 20px;
-        padding: 36px 32px;
-        margin-bottom: 28px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .hero-title {
-        font-size: 2.25rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #FFFFFF 0%, #CBD5E1 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 8px;
-        letter-spacing: -0.02em;
-    }
-
-    .hero-subtitle {
-        font-size: 1.05rem;
-        color: #94A3B8;
-        line-height: 1.5;
-        max-width: 650px;
-        margin-bottom: 0px;
-    }
-
-    /* Section Header */
-    .section-title {
-        font-size: 1.35rem;
-        font-weight: 700;
-        color: #F8FAFC;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 10px;
-        margin-bottom: 4px;
-        letter-spacing: -0.01em;
-    }
-
-    .section-subtitle {
-        font-size: 0.9rem;
-        color: #94A3B8;
-        margin-bottom: 16px;
-    }
-
-    /* Feature card on home */
-    .feature-card {
-        background: #111827;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 14px;
-        padding: 22px;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        transition: all 0.2s ease;
-    }
-
-    .feature-card:hover {
-        border-color: rgba(252, 76, 2, 0.4);
-        transform: translateY(-2px);
-        background: #162032;
-    }
-
-    .feature-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        margin-bottom: 14px;
-    }
-
-    /* Divider */
-    hr {
-        border-color: rgba(255, 255, 255, 0.08) !important;
-        margin: 24px 0 !important;
-    }
-
-    /* Tabs */
+    /* Minimalist Technical Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: rgba(17, 24, 39, 0.6);
-        padding: 6px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        gap: 4px;
+        background-color: #0A0D15;
+        padding: 4px;
+        border-radius: 8px;
+        border: 1px solid #161D2B;
     }
 
     .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        border-radius: 8px;
-        color: #94A3B8;
-        font-weight: 600;
+        height: 38px;
+        border-radius: 6px;
+        color: #718096;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        font-weight: 500;
         padding: 0 16px;
         border: none !important;
     }
 
     .stTabs [aria-selected="true"] {
-        background-color: #1E293B !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        background-color: #141B26 !important;
+        color: #F8FAFC !important;
+        border: 1px solid #202A3C !important;
     }
 
-    /* Code & JSON block */
+    /* Telemetry Panel Box */
+    .telemetry-panel {
+        background: #0B0E15;
+        border: 1px solid #161D2B;
+        border-radius: 8px;
+        padding: 22px;
+        margin-bottom: 20px;
+    }
+
+    /* Clean Code Block */
     pre, code {
         font-family: 'JetBrains Mono', monospace !important;
-        background-color: #0d131f !important;
-        border-radius: 8px !important;
+        background-color: #07090F !important;
+        border: 1px solid #141A26 !important;
+        border-radius: 6px !important;
+        color: #CBD5E1 !important;
+    }
+
+    hr {
+        border-color: #161D2B !important;
+        margin: 24px 0 !important;
     }
     </style>
     """
     st.markdown(custom_css, unsafe_allow_html=True)
 
 
-def render_metric_card(title, value, unit="", delta=None, delta_label="vs Baseline", is_inverse=False, card_type="default", icon=""):
+def render_telemetry_metric(label, value, unit="", baseline=None, delta=None, delta_label="vs Baseline", is_inverse=False, tag=""):
     """
-    Renders a modern, visually striking metric card.
+    Renders an engineering telemetry metric with precision monospace output.
+    Zero emojis, clean technical typography.
     """
-    delta_html = ""
+    indicator_html = ""
     if delta is not None:
         try:
-            delta_val = float(delta)
-            if delta_val > 0:
+            delta_num = float(delta)
+            if delta_num > 0:
                 css_class = "negative" if is_inverse else "positive"
-                arrow = "▲ +"
-            elif delta_val < 0:
+                sign = "+"
+            elif delta_num < 0:
                 css_class = "positive" if is_inverse else "negative"
-                arrow = "▼ "
+                sign = ""
             else:
                 css_class = "neutral"
-                arrow = "="
-            delta_html = f'<div class="metric-delta {css_class}">{arrow}{delta_val:g} {unit} {delta_label}</div>'
+                sign = ""
+            
+            baseline_str = f" [BASE: {baseline}]" if baseline is not None else ""
+            indicator_html = f'<div class="telemetry-indicator {css_class}">{sign}{delta_num:g} {unit}{baseline_str}</div>'
         except (ValueError, TypeError):
-            delta_html = f'<div class="metric-delta neutral">{delta}</div>'
+            indicator_html = f'<div class="telemetry-indicator neutral">{delta}</div>'
+    elif baseline is not None:
+        indicator_html = f'<div class="telemetry-indicator neutral">BASE: {baseline} {unit}</div>'
 
-    icon_html = f'<span style="font-size: 1rem;">{icon}</span>' if icon else ""
-    val_display = str(value) if value is not None and str(value) != "" else "N/A"
-    unit_html = f'<span class="metric-unit">{unit}</span>' if unit and val_display != "N/A" else ""
+    tag_html = f'<span class="tech-tag">{tag}</span>' if tag else ""
+    val_str = str(value) if value is not None and str(value) != "" else "N/A"
+    unit_str = f'<span class="telemetry-unit">{unit}</span>' if unit and val_str != "N/A" else ""
 
     html = f"""
-    <div class="metric-card {card_type}">
-        <div class="metric-label">{icon_html} {title}</div>
-        <div>
-            <span class="metric-value">{val_display}</span>
-            {unit_html}
+    <div class="telemetry-card">
+        <div class="telemetry-meta">
+            <span>{label}</span>
+            {tag_html}
         </div>
-        {delta_html}
+        <div>
+            <span class="telemetry-value">{val_str}</span>
+            {unit_str}
+        </div>
+        {indicator_html}
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)

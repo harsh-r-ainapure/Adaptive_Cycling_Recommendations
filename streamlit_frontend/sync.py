@@ -25,134 +25,130 @@ def show_sync_page():
         if "token" in st.query_params:
             del st.query_params["token"]
 
-        st.toast("Connected to Intervals.icu successfully!", icon="✅")
+        st.success("Authentication completed. Token registered in session.")
 
     jwt = st.session_state.get("jwt")
     is_connected = bool(jwt)
 
-    # Page Header
+    # Header
     st.markdown("""
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
-            <div>
-                <h1 style="margin: 0; font-size: 2.2rem; font-weight: 800; color: #F8FAFC;">
-                    🔄 Activity Synchronization
-                </h1>
-                <p style="color: #94A3B8; font-size: 1rem; margin-top: 6px;">
-                    Integrate your Intervals.icu account to fetch workouts, fit files, and power streams.
-                </p>
+        <div style="border-left: 2px solid #FF4B00; padding-left: 16px; margin-bottom: 22px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
+                INGESTION PIPELINE
             </div>
+            <h1 style="font-size: 2rem; font-weight: 700; color: #F8FAFC; margin: 4px 0 6px 0; letter-spacing: -0.02em;">
+                Activity Synchronization
+            </h1>
+            <p style="color: #7A889B; font-size: 0.9rem; margin: 0;">
+                Connect to Intervals.icu to stream cycling activities, power curves, and sensor channels into the analytics database.
+            </p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Status Banner
-    status_col1, status_col2 = st.columns([3, 1])
-    with status_col1:
+    # Status Monitor
+    stat_c1, stat_c2 = st.columns([5, 2])
+    with stat_c1:
         if is_connected:
-            masked_token = f"{jwt[:6]}...{jwt[-4:]}" if len(jwt) > 12 else "Valid Token"
+            masked = f"{jwt[:8]}...{jwt[-6:]}" if len(jwt) > 16 else "VALID_SESSION"
             st.markdown(f"""
-            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="background: #10B981; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 10px #10B981;"></div>
-                    <div>
-                        <div style="font-weight: 700; color: #34D399; font-size: 0.95rem;">Intervals.icu Connected</div>
-                        <div style="font-size: 0.8rem; color: #94A3B8;">Authorization Token: <code>{masked_token}</code></div>
+            <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 3px solid #10B981; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #10B981;">
+                        STATUS: AUTHENTICATED
+                    </div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748B; margin-top: 2px;">
+                        TOKEN: {masked}
                     </div>
                 </div>
-                <span class="badge-primary" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34D399;">Ready to Sync</span>
+                <span class="tech-tag live">READY</span>
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown("""
-            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="background: #F59E0B; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 10px #F59E0B;"></div>
-                    <div>
-                        <div style="font-weight: 700; color: #FBBF24; font-size: 0.95rem;">No Intervals Account Linked</div>
-                        <div style="font-size: 0.8rem; color: #94A3B8;">Connect your account below to begin ingestion.</div>
+            <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 3px solid #F59E0B; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #F59E0B;">
+                        STATUS: UNLINKED
+                    </div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748B; margin-top: 2px;">
+                        ACTION: OAUTH AUTHORIZATION REQUIRED
                     </div>
                 </div>
-                <span class="badge-primary" style="background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4); color: #FBBF24;">Action Required</span>
+                <span class="tech-tag">PENDING</span>
             </div>
             """, unsafe_allow_html=True)
 
-    with status_col2:
+    with stat_c2:
         if is_connected:
-            if st.button("Disconnect", use_container_width=True):
+            if st.button("Revoke Session", use_container_width=True):
                 st.session_state["jwt"] = None
                 st.rerun()
         else:
-            if st.button("Refresh State", use_container_width=True):
+            if st.button("Reload Status", use_container_width=True):
                 st.rerun()
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
-    # 3-Step Setup / Action Workflow
-    step_col1, step_col2 = st.columns([1, 1], gap="large")
+    # Ingestion Controls & Protocol Specification
+    col_flow, col_actions = st.columns([1, 1], gap="large")
 
-    with step_col1:
+    with col_flow:
         st.markdown("""
-        <div style="background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px;">
-            <div style="font-size: 1.1rem; font-weight: 700; color: #F8FAFC; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
-                <span>🚀</span> Setup & Connection Workflow
+        <div class="telemetry-panel">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 14px; font-weight: 600;">
+                Pipeline Architecture
             </div>
             <div style="display: flex; flex-direction: column; gap: 14px;">
-                <div style="display: flex; gap: 12px; align-items: flex-start;">
-                    <div style="background: #1E293B; border: 1px solid rgba(255,255,255,0.1); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #FC4C02;">1</div>
-                    <div>
-                        <div style="font-weight: 600; color: #F1F5F9; font-size: 0.9rem;">Create or Login to Intervals.icu</div>
-                        <div style="font-size: 0.8rem; color: #94A3B8;">Connect your Strava, Garmin, or Wahoo device inside <a href="https://intervals.icu/" target="_blank" style="color: #FC4C02;">Intervals.icu</a>.</div>
-                    </div>
+                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">01 // AUTHENTICATION</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Handshake with Intervals.icu</div>
+                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Ensure Strava/Garmin devices are authorized inside Intervals.icu.</div>
                 </div>
-                <div style="display: flex; gap: 12px; align-items: flex-start;">
-                    <div style="background: #1E293B; border: 1px solid rgba(255,255,255,0.1); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #FC4C02;">2</div>
-                    <div>
-                        <div style="font-weight: 600; color: #F1F5F9; font-size: 0.9rem;">Authorize via OAuth</div>
-                        <div style="font-size: 0.8rem; color: #94A3B8;">Grant secure access using the OAuth connection button.</div>
-                    </div>
+                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">02 // CALIBRATION</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Hardware & Power Sensor Mapping</div>
+                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Verify strain gauge installation month to separate raw from estimated metrics.</div>
                 </div>
-                <div style="display: flex; gap: 12px; align-items: flex-start;">
-                    <div style="background: #1E293B; border: 1px solid rgba(255,255,255,0.1); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #FC4C02;">3</div>
-                    <div>
-                        <div style="font-weight: 600; color: #F1F5F9; font-size: 0.9rem;">Calibrate & Ingest</div>
-                        <div style="font-size: 0.8rem; color: #94A3B8;">Complete your rider setup profile and sync your ride history.</div>
-                    </div>
+                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">03 // INGESTION</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Stream Pull & Feature Extraction</div>
+                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Ingest workouts, derive exponential fatigue, and recalculate target baseline.</div>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.button("Configure Rider Profile First ➔", use_container_width=True):
+        if st.button("Edit Sensor Profile", use_container_width=True):
             st.session_state["selected_page"] = "Setup Form"
             st.rerun()
 
-    with step_col2:
+    with col_actions:
         st.markdown("""
-        <div style="background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px;">
-            <div style="font-size: 1.1rem; font-weight: 700; color: #F8FAFC; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
-                <span>⚡</span> Sync Operations
+        <div class="telemetry-panel">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 14px; font-weight: 600;">
+                Ingestion Triggers
             </div>
-            <p style="color: #94A3B8; font-size: 0.85rem; margin-bottom: 18px;">
-                Authenticate with Intervals.icu or initiate a full historical sync of your recent cycling activities.
+            <p style="color: #7A889B; font-size: 0.82rem; margin-bottom: 16px; line-height: 1.5;">
+                Trigger OAuth credential exchange or dispatch a synchronous ingestion request to the backend worker.
             </p>
         </div>
         """, unsafe_allow_html=True)
 
         st.link_button(
-            "🔗 Connect Intervals.icu via OAuth",
+            "Connect Intervals.icu via OAuth",
             f"{BACKEND}/api/user/signup",
             use_container_width=True,
         )
 
-        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-        sync_clicked = st.button("⚡ Sync Activities Now", type="primary", use_container_width=True)
+        sync_triggered = st.button("Initiate Activity Ingestion", type="primary", use_container_width=True)
 
-        if sync_clicked:
+        if sync_triggered:
             if not jwt:
-                st.error("Please connect your Intervals.icu account before syncing.")
+                st.error("Authentication required. Please connect your Intervals.icu account above.")
             else:
-                with st.spinner("Connecting to backend and synchronizing activities... This may take up to a few minutes for large catalogs."):
+                with st.spinner("Executing pipeline: fetching activity streams, calculating fatigue index, and updating model..."):
                     try:
                         response = requests.post(
                             f"{BACKEND}/api/sync/activities",
@@ -163,20 +159,19 @@ def show_sync_page():
                         )
                         response.raise_for_status()
 
-                        st.success("Activities synchronized successfully!")
+                        st.success("Activity ingestion completed successfully.")
 
-                        # Show result details cleanly
                         try:
-                            result_data = response.json()
-                            with st.expander("📄 View Sync Response Payload", expanded=True):
-                                st.json(result_data)
+                            payload = response.json()
+                            with st.expander("Inspection: Raw Pipeline Response", expanded=True):
+                                st.json(payload)
                         except Exception:
-                            st.write(response.text)
+                            st.code(response.text)
 
-                        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-                        if st.button("View AI Dashboard Now ➔", key="goto_coach_post_sync"):
+                        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                        if st.button("Open Telemetry Dashboard", key="btn_to_dashboard"):
                             st.session_state["selected_page"] = "Adaptive Cycling Coach"
                             st.rerun()
 
                     except requests.exceptions.RequestException as e:
-                        st.error(f"Unable to contact backend during sync.\n\n{e}")
+                        st.error(f"Ingestion pipeline failed: {e}")

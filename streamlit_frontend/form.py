@@ -101,7 +101,8 @@ def show_form_page():
             )
 
         if submitted:
-            if not name.strip():
+            name_str = (name or "").strip()
+            if not name_str:
                 st.error("Athlete name cannot be blank.")
                 st.stop()
 
@@ -113,16 +114,18 @@ def show_form_page():
             year_number = None
 
             if has_power == "Yes":
-                month_number = months.index(start_month) + 1
+                if start_month is not None and start_month in months:
+                    month_number = months.index(start_month) + 1
                 year_number = start_year
 
             payload = {
-                "name": name.strip(),
+                "name": name_str,
                 "has_power_meter": has_power == "Yes",
                 "power_meter_month": month_number,
                 "power_meter_year": year_number
             }
 
+            response = None
             try:
                 with st.spinner("Writing calibration parameters to database..."):
                     response = requests.post(
@@ -136,7 +139,7 @@ def show_form_page():
                     response.raise_for_status()
 
                 st.success("Calibration profile committed successfully.")
-                st.session_state["user_name"] = name.strip()
+                st.session_state["user_name"] = name_str
                 st.session_state["has_power"] = has_power
                 st.session_state["power_start_month"] = month_number
                 st.session_state["power_start_year"] = year_number
@@ -144,8 +147,9 @@ def show_form_page():
                 st.session_state["selected_page"] = "Sync"
                 st.rerun()
 
-            except requests.exceptions.HTTPError:
-                st.error(f"Server response error: {response.text}")
+            except requests.exceptions.HTTPError as http_err:
+                err_msg = response.text if response is not None else str(http_err)
+                st.error(f"Server response error: {err_msg}")
             except Exception as e:
                 st.error(f"Unable to save calibration profile: {e}")
 

@@ -11,104 +11,172 @@ if "jwt" not in st.session_state:
 
 
 def show_sync_page():
-
-    st.title("Sync")
-
     # -------------------------
-    # First time here section
-    # -------------------------
-    st.markdown("### First time here?")
-    st.markdown("""
-    1. Create an Intervals.icu account → [Intervals.icu Sign Up](https://intervals.icu/)
-    2. Connect your Strava/Garmin account inside Intervals.
-    3. Return here and click **Connect Intervals**.
-    4. Click **Sync Activities**.
-    5. Fill out your rider profile to calibrate your power baseline.
-    """)
-
-    # Direct button to guide the user to the form page
-    if st.button("Go to Setup Form ➔"):
-        st.session_state["selected_page"] = "Setup Form"
-        st.rerun()
-
-   
-    st.divider()
-
-    # -------------------------
-    # Read JWT safely
-    # -------------------------
-    jwt = st.session_state.get("jwt")
-
-    # -------------------------
-    # OAuth callback
+    # OAuth callback token check
     # -------------------------
     params = st.query_params
-
     token = params.get("token")
 
     if token:
-        # query_params may return a list depending on Streamlit version
         if isinstance(token, list):
             token = token[0]
 
         st.session_state["jwt"] = token
-        jwt = token
-
         if "token" in st.query_params:
             del st.query_params["token"]
 
-        st.success(" Successfully connected to Intervals!")
+        st.toast("Connected to Intervals.icu successfully!", icon="✅")
 
-    # -------------------------
-    # Connection Status
-    # -------------------------
-    if jwt:
-        st.success(" Intervals account connected.")
-    else:
-        st.warning(" No Intervals account connected.")
+    jwt = st.session_state.get("jwt")
+    is_connected = bool(jwt)
 
-    # -------------------------
-    # OAuth Button
-    # -------------------------
-    st.link_button(
-        " Connect Intervals",
-        f"{BACKEND}/api/user/signup",
-        use_container_width=True,
-    )
+    # Page Header
+    st.markdown("""
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+            <div>
+                <h1 style="margin: 0; font-size: 2.2rem; font-weight: 800; color: #F8FAFC;">
+                    🔄 Activity Synchronization
+                </h1>
+                <p style="color: #94A3B8; font-size: 1rem; margin-top: 6px;">
+                    Integrate your Intervals.icu account to fetch workouts, fit files, and power streams.
+                </p>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
-    st.write("")
+    # Status Banner
+    status_col1, status_col2 = st.columns([3, 1])
+    with status_col1:
+        if is_connected:
+            masked_token = f"{jwt[:6]}...{jwt[-4:]}" if len(jwt) > 12 else "Valid Token"
+            st.markdown(f"""
+            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="background: #10B981; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 10px #10B981;"></div>
+                    <div>
+                        <div style="font-weight: 700; color: #34D399; font-size: 0.95rem;">Intervals.icu Connected</div>
+                        <div style="font-size: 0.8rem; color: #94A3B8;">Authorization Token: <code>{masked_token}</code></div>
+                    </div>
+                </div>
+                <span class="badge-primary" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.4); color: #34D399;">Ready to Sync</span>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="background: #F59E0B; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 10px #F59E0B;"></div>
+                    <div>
+                        <div style="font-weight: 700; color: #FBBF24; font-size: 0.95rem;">No Intervals Account Linked</div>
+                        <div style="font-size: 0.8rem; color: #94A3B8;">Connect your account below to begin ingestion.</div>
+                    </div>
+                </div>
+                <span class="badge-primary" style="background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4); color: #FBBF24;">Action Required</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # -------------------------
-    # Sync Button
-    # -------------------------
-    if st.button("Sync Activities", use_container_width=True):
+    with status_col2:
+        if is_connected:
+            if st.button("Disconnect", use_container_width=True):
+                st.session_state["jwt"] = None
+                st.rerun()
+        else:
+            if st.button("Refresh State", use_container_width=True):
+                st.rerun()
 
-        jwt = st.session_state.get("jwt")
+    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
-        if not jwt:
-            st.error("Please connect your Intervals account first.")
-            st.stop()
+    # 3-Step Setup / Action Workflow
+    step_col1, step_col2 = st.columns([1, 1], gap="large")
 
-        with st.spinner("Syncing activities..."):
+    with step_col1:
+        st.markdown("""
+        <div style="background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px;">
+            <div style="font-size: 1.1rem; font-weight: 700; color: #F8FAFC; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                <span>🚀</span> Setup & Connection Workflow
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <div style="background: #1E293B; border: 1px solid rgba(255,255,255,0.1); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #FC4C02;">1</div>
+                    <div>
+                        <div style="font-weight: 600; color: #F1F5F9; font-size: 0.9rem;">Create or Login to Intervals.icu</div>
+                        <div style="font-size: 0.8rem; color: #94A3B8;">Connect your Strava, Garmin, or Wahoo device inside <a href="https://intervals.icu/" target="_blank" style="color: #FC4C02;">Intervals.icu</a>.</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <div style="background: #1E293B; border: 1px solid rgba(255,255,255,0.1); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #FC4C02;">2</div>
+                    <div>
+                        <div style="font-weight: 600; color: #F1F5F9; font-size: 0.9rem;">Authorize via OAuth</div>
+                        <div style="font-size: 0.8rem; color: #94A3B8;">Grant secure access using the OAuth connection button.</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <div style="background: #1E293B; border: 1px solid rgba(255,255,255,0.1); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; color: #FC4C02;">3</div>
+                    <div>
+                        <div style="font-weight: 600; color: #F1F5F9; font-size: 0.9rem;">Calibrate & Ingest</div>
+                        <div style="font-size: 0.8rem; color: #94A3B8;">Complete your rider setup profile and sync your ride history.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-            try:
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        if st.button("Configure Rider Profile First ➔", use_container_width=True):
+            st.session_state["selected_page"] = "Setup Form"
+            st.rerun()
 
-                response = requests.post(
-                    f"{BACKEND}/api/sync/activities",
-                    headers={
-                        "Authorization": f"Bearer {jwt}"
-                    },
-                    timeout=300,   # increase timeout while testing
-                )
+    with step_col2:
+        st.markdown("""
+        <div style="background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 22px;">
+            <div style="font-size: 1.1rem; font-weight: 700; color: #F8FAFC; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                <span>⚡</span> Sync Operations
+            </div>
+            <p style="color: #94A3B8; font-size: 0.85rem; margin-bottom: 18px;">
+                Authenticate with Intervals.icu or initiate a full historical sync of your recent cycling activities.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
-                response.raise_for_status()
+        st.link_button(
+            "🔗 Connect Intervals.icu via OAuth",
+            f"{BACKEND}/api/user/signup",
+            use_container_width=True,
+        )
 
-                st.success(" Activities synced successfully!")
+        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-                try:
-                    st.json(response.json())
-                except Exception:
-                    st.write(response.text)
+        sync_clicked = st.button("⚡ Sync Activities Now", type="primary", use_container_width=True)
 
-            except requests.exceptions.RequestException as e:
-                st.error(f"Unable to contact backend.\n\n{e}")
+        if sync_clicked:
+            if not jwt:
+                st.error("Please connect your Intervals.icu account before syncing.")
+            else:
+                with st.spinner("Connecting to backend and synchronizing activities... This may take up to a few minutes for large catalogs."):
+                    try:
+                        response = requests.post(
+                            f"{BACKEND}/api/sync/activities",
+                            headers={
+                                "Authorization": f"Bearer {jwt}"
+                            },
+                            timeout=300,
+                        )
+                        response.raise_for_status()
+
+                        st.success("Activities synchronized successfully!")
+
+                        # Show result details cleanly
+                        try:
+                            result_data = response.json()
+                            with st.expander("📄 View Sync Response Payload", expanded=True):
+                                st.json(result_data)
+                        except Exception:
+                            st.write(response.text)
+
+                        st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                        if st.button("View AI Dashboard Now ➔", key="goto_coach_post_sync"):
+                            st.session_state["selected_page"] = "Adaptive Cycling Coach"
+                            st.rerun()
+
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Unable to contact backend during sync.\n\n{e}")

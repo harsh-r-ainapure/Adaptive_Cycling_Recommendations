@@ -7,6 +7,10 @@ font = "sans serif"
 
 [client]
 showErrorDetails = true
+showSidebarNavigation = false
+
+[server]
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

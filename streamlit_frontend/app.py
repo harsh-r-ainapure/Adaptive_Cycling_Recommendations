@@ -92,6 +92,16 @@ NAV_LABELS = {
     "Contact": "Dispatch & Support"
 }
 
+# Check query parameters for direct page routing (e.g. ?page=privacy or ?p=privacy)
+route_param = st.query_params.get("page") or st.query_params.get("p")
+if isinstance(route_param, list):
+    route_param = route_param[0] if route_param else None
+
+if route_param:
+    route_clean = str(route_param).lower().replace("-", "").replace("_", "")
+    if route_clean in ["privacy", "privacypolicy"]:
+        st.session_state["selected_page"] = "Privacy Policy"
+
 if "selected_page" not in st.session_state:
     st.session_state["selected_page"] = "Home"
 

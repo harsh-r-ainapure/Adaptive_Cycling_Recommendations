@@ -1,3 +1,19 @@
+import shutil
+from pathlib import Path
+import streamlit.file_util as file_util
+
+# Ensure logo.png and stravalogo.png are available in Streamlit's static root
+try:
+    _static_dir = Path(file_util.get_static_dir())
+    _src_logo = Path(__file__).resolve().parent / "stravalogo.png"
+    if _src_logo.exists() and _static_dir.exists():
+        for _name in ["logo.png", "stravalogo.png"]:
+            _dest = _static_dir / _name
+            if not _dest.exists() or _dest.stat().st_size != _src_logo.stat().st_size:
+                shutil.copy2(_src_logo, _dest)
+except Exception:
+    pass
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px

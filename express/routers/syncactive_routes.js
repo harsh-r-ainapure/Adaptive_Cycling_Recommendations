@@ -1,13 +1,12 @@
 import express from "express";
-import { syncActivities } from "../controllers/syncactive_controller.js";
-import authenticate from "../middleware/authmiddleware.js";
+import { verifyGarminWebhook, handleGarminWebhook } from "../controllers/syncactive_controller.js";
 
 const router = express.Router();
 
-router.post(
-    "/activities",
-    authenticate,
-    syncActivities
-);
+// GET route for Garmin webhook domain/challenge verification
+router.get("/activities", verifyGarminWebhook);
+
+// POST route for incoming Garmin activity push webhooks
+router.post("/activities", handleGarminWebhook);
 
 export default router;

@@ -28,7 +28,7 @@ WHERE user_id = %s
 ORDER BY activity_date
 """
 
-df_activity = pd.read_sql_query(query1, conn, params=(user_id,))
+df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
 
 df_activity = df_activity.rename(columns={
     "id": "Activity UUID",
@@ -55,7 +55,7 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_features = pd.read_sql_query(query2, conn, params=(user_id,))
+df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
 
 df_features = df_features.rename(columns={
     "gradient": "Gradient",
@@ -122,11 +122,10 @@ X = df[FEATURE_COLUMNS]
 Y = df["Average Watts"]
 
 model = xg.XGBRegressor(
-max_depth=5,       
+    max_depth=5,       
     learning_rate=0.05, 
     subsample=0.8,     
     random_state=42
-
 )
 
 model.fit(X, Y)
@@ -144,11 +143,8 @@ df["Estimated Power"] = model.predict(X)
 importance = model.feature_importances_
 
 feature_importance = pd.DataFrame({
-
     "Feature": X.columns,
-
     "Importance": importance
-
 })
 
 feature_importance = (
@@ -198,30 +194,29 @@ df = df.sort_values(
     "Activity Date"
 ).reset_index(drop=True)
 
-def cum_fat_cal (df,k=0.15) :
- 
- cum_fat = []
- for i in range(0,len(df)):
-   curr_date = df.loc[i,"Activity Date"]
-   cut_off_date = curr_date - pd.Timedelta(days=14)
-   rides = df.iloc[:i+1]
+def cum_fat_cal(df, k=0.15):
+    cum_fat = []
+    for i in range(0, len(df)):
+        curr_date = df.loc[i, "Activity Date"]
+        cut_off_date = curr_date - pd.Timedelta(days=14)
+        rides = df.iloc[:i+1]
 
-   rides = rides[
-    rides["Activity Date"] >= cut_off_date
-    ]
-   
-   days = (curr_date - rides["Activity Date"]).dt.days
-   
-   fatigue_sum = 0
-   for j in range (0,len(rides)):
-     decay = np.exp(-k * days.iloc[j])
-     fatigue_sum += (
+        rides = rides[
+            rides["Activity Date"] >= cut_off_date
+        ]
+        
+        days = (curr_date - rides["Activity Date"]).dt.days
+        
+        fatigue_sum = 0
+        for j in range(0, len(rides)):
+            decay = np.exp(-k * days.iloc[j])
+            fatigue_sum += (
                 rides.iloc[j]["Fatigue"]
                 * decay
             )
-   cum_fat.append(fatigue_sum)
+        cum_fat.append(fatigue_sum)
             
- return cum_fat 
+    return cum_fat 
 
 df["Cumulative_Fatigue"] = (
     cum_fat_cal(df)
@@ -243,13 +238,13 @@ print(
 
 print(
     df.loc[
-        df["Cumulative_Fatigue"].idxmin()
+        df["Cumulative_Fatigue"].idxmin()  # type: ignore
     ]
 )
 
 print(
     df.loc[
-        df["Cumulative_Fatigue"].idxmax()
+        df["Cumulative_Fatigue"].idxmax()  # type: ignore
     ]
 )
 
@@ -261,10 +256,10 @@ print(
     (abs(df["Fatigue"]) > 24).mean()
 )
 
-idx = df["Cumulative_Fatigue"].idxmin()
+idx = int(df["Cumulative_Fatigue"].idxmin())  # type: ignore
 
 print(
-    df.loc[idx-10:idx,
+    df.loc[idx-10:idx,  # type: ignore
         [
             "Activity Date",
             "Average Watts",
@@ -309,16 +304,3 @@ cursor.close()
 conn.close()
 
 print(f"Saved {len(df)} prediction rows.")
-
-
-
-
-
-
-
-
-   
-
-
-
-

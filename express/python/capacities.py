@@ -28,7 +28,7 @@ WHERE user_id = %s
 ORDER BY activity_date
 """
 
-df_activity = pd.read_sql_query(query1, conn, params=(user_id,))
+df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
 
 df_activity = df_activity.rename(columns={
     "id": "Activity UUID",
@@ -55,7 +55,7 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_features = pd.read_sql_query(query2, conn, params=(user_id,))
+df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
 
 df_features = df_features.rename(columns={
     "gradient": "Gradient",
@@ -74,7 +74,7 @@ df_features = df_features.rename(columns={
     "baseline_hr": "baseline_hr"
 })
 
-query3 =""" SELECT
+query3 = """ SELECT
     p.*
 FROM predictions p
 JOIN activities a
@@ -83,7 +83,7 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_predictions = pd.read_sql_query(query3, conn, params=(user_id,))
+df_predictions = pd.read_sql_query(query3, conn, params=(user_id,))  # type: ignore
 
 df_predictions = df_predictions.rename(columns={
     "estimated_power": "Estimated Power",
@@ -121,40 +121,40 @@ df = df.sort_values(
     "Activity Date"
 ).reset_index(drop=True)
 
-def baseline_capp (df):
+def baseline_capp(df):
     baseline_pow_list = []
     baseline_dist_list = []
     baseline_ele_list = []
     baseline_HR_list = []
     overlap = 0
-    for i in range(0,len(df)):
-        curr_date = df.loc[i,"Activity Date"]
+    for i in range(0, len(df)):
+        curr_date = df.loc[i, "Activity Date"]
         cut_off_date = curr_date - pd.Timedelta(days=150)
         rides = df.iloc[:i+1]
 
         rides = rides[
-        rides["Activity Date"] >= cut_off_date
-         ]
+            rides["Activity Date"] >= cut_off_date
+        ]
         
         min_fatigue_rides = rides.nsmallest(3, "Fatigue")
         max_power_rides = rides.nlargest(3, "Average Watts")
         has_overlap = min_fatigue_rides.index.isin(max_power_rides.index).any()
-        if has_overlap :
-            overlap+=1
-            common_rides =  min_fatigue_rides[
-            min_fatigue_rides.index.isin(max_power_rides.index)
+        if has_overlap:
+            overlap += 1
+            common_rides = min_fatigue_rides[
+                min_fatigue_rides.index.isin(max_power_rides.index)
             ]
             baseline_pow_list.append(common_rides["Average Watts"].mean())
             baseline_dist_list.append(common_rides["Distance"].mean())
             baseline_ele_list.append(common_rides["Elevation Gain"].mean())
             baseline_HR_list.append(common_rides["Average Heart Rate"].median())
-        else :
-            baseline = min_fatigue_rides.nlargest(1,"Average Watts")
+        else:
+            baseline = min_fatigue_rides.nlargest(1, "Average Watts")
             baseline_pow_list.append(baseline.iloc[0]["Average Watts"])
             baseline_dist_list.append(baseline.iloc[0]["Distance"])
             baseline_ele_list.append(baseline.iloc[0]["Elevation Gain"])
             baseline_HR_list.append(baseline.iloc[0]["Average Heart Rate"])
-    return baseline_pow_list , baseline_dist_list , baseline_ele_list , baseline_HR_list , overlap
+    return baseline_pow_list, baseline_dist_list, baseline_ele_list, baseline_HR_list, overlap
 
 baseline_pow_list, baseline_dist_list, baseline_ele_list, baseline_HR_list, overlap = baseline_capp(df)
 
@@ -163,7 +163,7 @@ df["Baseline_Dist"] = baseline_dist_list
 df["Baseline_Ele"] = baseline_ele_list
 df["Baseline_HR"] = baseline_HR_list
 
-print("Overlap" , overlap)
+print("Overlap", overlap)
 
 df["Current_Capacity"] = (
     df["Baseline_Pow"]
@@ -209,7 +209,3 @@ cursor.close()
 conn.close()
 
 print(f"Updated {len(df)} prediction rows.")
-
-
-
-   

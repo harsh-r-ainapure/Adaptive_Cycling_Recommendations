@@ -28,7 +28,7 @@ def fit_to_csv(fit_path):
 
         row = {}
 
-        for data in record:
+        for data in record:  # type: ignore
 
             row[data.name] = data.value
 
@@ -116,7 +116,7 @@ df = pd.read_sql_query(
     query,
     conn,
     params=(user_id,)
-)
+)  # type: ignore
 
 df = df.rename(columns={
     "id": "Activity UUID",
@@ -728,7 +728,7 @@ hr_sd = EXCLUDED.hr_sd,
 ele_sd = EXCLUDED.ele_sd,
 cadence_sd = EXCLUDED.cadence_sd,
 cadence_drift = EXCLUDED.cadence_drift,
-hr_recovery_slope = EXCLUDED.hr_recovery_slope,
+hr_recovery_slope = EXCLUDED.HR_Recovery_Slope,
 rolling_percent = EXCLUDED.rolling_percent,
 stopping_percent = EXCLUDED.stopping_percent,
 stop_hr_recovery_percent = EXCLUDED.stop_hr_recovery_percent,

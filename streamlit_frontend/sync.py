@@ -25,7 +25,7 @@ def show_sync_page():
         if "token" in st.query_params:
             del st.query_params["token"]
 
-        st.success("Authentication completed. Token registered in session.")
+        st.success("Authentication completed. Garmin session registered.")
 
     jwt = st.session_state.get("jwt")
     is_connected = bool(jwt)
@@ -34,13 +34,13 @@ def show_sync_page():
     st.markdown("""
         <div style="border-left: 2px solid #FF4B00; padding-left: 16px; margin-bottom: 22px;">
             <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
-                INGESTION PIPELINE
+                INGESTION & DATA PIPELINE
             </div>
             <h1 style="font-size: 2rem; font-weight: 700; color: #F8FAFC; margin: 4px 0 6px 0; letter-spacing: -0.02em;">
-                Activity Synchronization
+                Garmin Connect Synchronization
             </h1>
             <p style="color: #7A889B; font-size: 0.9rem; margin: 0;">
-                Connect to Intervals.icu to stream cycling activities, power curves, and sensor channels into the analytics database.
+                Connect to Garmin Health API, import historical training archives, and manage real-time webhook ingestion.
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -54,13 +54,13 @@ def show_sync_page():
             <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 3px solid #10B981; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #10B981;">
-                        STATUS: AUTHENTICATED
+                        STATUS: AUTHENTICATED // GARMIN CONNECT
                     </div>
                     <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748B; margin-top: 2px;">
                         TOKEN: {masked}
                     </div>
                 </div>
-                <span class="tech-tag live">READY</span>
+                <span class="tech-tag live">ACTIVE</span>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -68,10 +68,10 @@ def show_sync_page():
             <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 3px solid #F59E0B; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #F59E0B;">
-                        STATUS: UNLINKED
+                        STATUS: UNLINKED // GARMIN CONNECT
                     </div>
                     <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748B; margin-top: 2px;">
-                        ACTION: OAUTH AUTHORIZATION REQUIRED
+                        ACTION: GARMIN PKCE OAUTH2 AUTHORIZATION REQUIRED
                     </div>
                 </div>
                 <span class="tech-tag">PENDING</span>
@@ -89,89 +89,197 @@ def show_sync_page():
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
 
-    # Ingestion Controls & Protocol Specification
-    col_flow, col_actions = st.columns([1, 1], gap="large")
+    # Tabs for Data Pipeline Operations
+    tab_history, tab_webhooks, tab_architecture = st.tabs([
+        "01 // HISTORICAL ZIP IMPORT",
+        "02 // AUTOMATIC WEBHOOK PIPELINE",
+        "03 // PIPELINE ARCHITECTURE"
+    ])
 
-    with col_flow:
+    # --------------------------------------------------------
+    # TAB 1: FIRST-TIME HISTORICAL ZIP IMPORT
+    # --------------------------------------------------------
+    with tab_history:
         st.markdown("""
-        <div class="telemetry-panel">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 14px; font-weight: 600;">
-                Pipeline Architecture
+        <div class="telemetry-panel" style="margin-bottom: 16px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">
+                First-Time Setup: Garmin Historical Archive Package
             </div>
-            <div style="display: flex; flex-direction: column; gap: 14px;">
-                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">01 // AUTHENTICATION</div>
-                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Handshake with Intervals.icu</div>
-                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Ensure Strava/Garmin devices are authorized inside Intervals.icu.</div>
-                </div>
-                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">02 // CALIBRATION</div>
-                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Hardware & Power Sensor Mapping</div>
-                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Verify strain gauge installation month to separate raw from estimated metrics.</div>
-                </div>
-                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">03 // INGESTION</div>
-                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Stream Pull & Feature Extraction</div>
-                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Ingest workouts, derive exponential fatigue, and recalculate target baseline.</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button("Edit Sensor Profile", use_container_width=True):
-            st.session_state["selected_page"] = "Setup Form"
-            st.rerun()
-
-    with col_actions:
-        st.markdown("""
-        <div class="telemetry-panel">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 14px; font-weight: 600;">
-                Ingestion Triggers
-            </div>
-            <p style="color: #7A889B; font-size: 0.82rem; margin-bottom: 16px; line-height: 1.5;">
-                Trigger OAuth credential exchange or dispatch a synchronous ingestion request to the backend worker.
+            <p style="color: #7A889B; font-size: 0.85rem; line-height: 1.5; margin: 0;">
+                Garmin Health API streams upcoming activities in real time via webhooks. To initialize your 180-day physiological fatigue curve and train the Random Forest power regressor, upload your Garmin Connect data export archive (.zip containing .fit files).
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        st.link_button(
-            "Connect Intervals.icu via OAuth",
-            f"{BACKEND}/api/user/signup",
-            use_container_width=True,
-        )
+        if not is_connected:
+            st.markdown("""
+            <div class="telemetry-panel" style="border-left: 3px solid #F59E0B;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F59E0B; text-transform: uppercase; margin-bottom: 6px;">
+                    AUTHENTICATION REQUIRED FIRST
+                </div>
+                <p style="color: #94A3B8; font-size: 0.85rem; margin-bottom: 12px;">
+                    Please authenticate with Garmin Connect before uploading your historical data package.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+            st.link_button(
+                "Authorize Garmin Connect via OAuth2",
+                f"{BACKEND}/api/auth/garmin/signup",
+                use_container_width=True,
+            )
+        else:
+            col_upload, col_instructions = st.columns([1, 1], gap="large")
 
-        sync_triggered = st.button("Initiate Activity Ingestion", type="primary", use_container_width=True)
+            with col_upload:
+                uploaded_zip = st.file_uploader(
+                    "Select Garmin Export Archive (.zip)",
+                    type=["zip"],
+                    help="Upload your exported Garmin data package containing raw .fit activity files."
+                )
 
-        if sync_triggered:
-            if not jwt:
-                st.error("Authentication required. Please connect your Intervals.icu account above.")
-            else:
-                with st.spinner("Executing pipeline: fetching activity streams, calculating fatigue index, and updating model..."):
-                    try:
-                        response = requests.post(
-                            f"{BACKEND}/api/sync/activities",
-                            headers={
-                                "Authorization": f"Bearer {jwt}"
-                            },
-                            timeout=300,
-                        )
-                        response.raise_for_status()
+                upload_btn = st.button(
+                    "Import Historical Data & Train ML Models",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=(uploaded_zip is None)
+                )
 
-                        st.success("Activity ingestion completed successfully.")
-
+                if upload_btn and uploaded_zip is not None:
+                    with st.spinner("Processing archive: unpacking .fit files, preprocessing telemetry, extracting features, and training baseline ML models... (this may take up to a few minutes)"):
                         try:
-                            payload = response.json()
-                            with st.expander("Inspection: Raw Pipeline Response", expanded=True):
-                                st.json(payload)
-                        except Exception:
-                            st.code(response.text)
+                            files = {
+                                "zipFile": (uploaded_zip.name, uploaded_zip.getvalue(), "application/zip")
+                            }
+                            headers = {
+                                "Authorization": f"Bearer {jwt}"
+                            }
 
-                        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-                        if st.button("Open Telemetry Dashboard", key="btn_to_dashboard"):
-                            st.session_state["selected_page"] = "Adaptive Cycling Coach"
-                            st.rerun()
+                            res = requests.post(
+                                f"{BACKEND}/api/history/upload-history",
+                                headers=headers,
+                                files=files,
+                                timeout=600
+                            )
 
-                    except requests.exceptions.RequestException as e:
-                        st.error(f"Ingestion pipeline failed: {e}")
+                            if res.status_code == 200:
+                                st.success("Historical data package processed successfully! Baseline models initialized.")
+                                try:
+                                    res_json = res.json()
+                                    st.json(res_json)
+                                except Exception:
+                                    st.write(res.text)
+
+                                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+                                if st.button("Launch Coach Dashboard ➔", key="goto_dash_post_history"):
+                                    st.session_state["selected_page"] = "Adaptive Cycling Coach"
+                                    st.rerun()
+
+                            elif res.status_code == 403:
+                                st.info("Historical data already exists in database. Baseline initialized. Future rides synchronize automatically via Garmin webhooks.")
+                                try:
+                                    st.json(res.json())
+                                except Exception:
+                                    pass
+                            else:
+                                st.error(f"Import returned HTTP {res.status_code}: {res.text}")
+
+                        except requests.exceptions.RequestException as e:
+                            st.error(f"Upload and processing pipeline failed: {e}")
+
+            with col_instructions:
+                st.markdown("""
+                <div class="telemetry-panel">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 12px; font-weight: 600;">
+                        How to Export Garmin History
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.82rem; color: #94A3B8;">
+                        <div>
+                            <strong style="color: #CBD5E1;">1. Garmin Account Settings:</strong> Log in to <a href="https://www.garmin.com/en-US/account/datamanagement/" target="_blank" style="color: #FF4B00;">Garmin Data Management</a>.
+                        </div>
+                        <div>
+                            <strong style="color: #CBD5E1;">2. Request Export:</strong> Click <em>Export Your Data</em> &rarr; <em>Request Data Export</em>.
+                        </div>
+                        <div>
+                            <strong style="color: #CBD5E1;">3. Download Package:</strong> Garmin will email a ZIP download link containing your DI_CONNECT activity folders.
+                        </div>
+                        <div>
+                            <strong style="color: #CBD5E1;">4. Ingest Here:</strong> Upload the downloaded .zip directly without extracting it.
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # TAB 2: AUTOMATIC WEBHOOK PIPELINE
+    # --------------------------------------------------------
+    with tab_webhooks:
+        st.markdown("""
+        <div class="telemetry-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; font-weight: 600;">
+                    Real-Time Ingestion Listener
+                </div>
+                <span class="tech-tag live">ENDPOINT: /api/sync/activities</span>
+            </div>
+            <p style="color: #7A889B; font-size: 0.85rem; line-height: 1.6; margin-bottom: 16px;">
+                Once your historical baseline has been initialized, future rides require zero manual action. When you finish and save an activity on your Garmin Edge, Forerunner, or Fenix device:
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+                <div style="background: #07090E; border: 1px solid #161D2B; border-radius: 6px; padding: 14px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #FF4B00;">01 // PUSH EVENT</div>
+                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 4px;">Garmin Health API pushes notification to webhook receiver.</div>
+                </div>
+                <div style="background: #07090E; border: 1px solid #161D2B; border-radius: 6px; padding: 14px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #FF4B00;">02 // FIT DECOMPRESSION</div>
+                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 4px;">Backend downloads, gunzips, and parses binary telemetry.</div>
+                </div>
+                <div style="background: #07090E; border: 1px solid #161D2B; border-radius: 6px; padding: 14px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #FF4B00;">03 // ML RETRAINING</div>
+                    <div style="font-size: 0.82rem; color: #CBD5E1; margin-top: 4px;">Fatigue half-life decays, RF models infer, recommendations update.</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if not is_connected:
+            st.link_button(
+                "Link Garmin Connect Account",
+                f"{BACKEND}/api/auth/garmin/signup",
+                use_container_width=True,
+            )
+        else:
+            st.info("Garmin Connect account is linked. Automated background synchronization is active.")
+
+    # --------------------------------------------------------
+    # TAB 3: PIPELINE ARCHITECTURE
+    # --------------------------------------------------------
+    with tab_architecture:
+        st.markdown("""
+        <div class="telemetry-panel">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 14px; font-weight: 600;">
+                Garmin Integration Architecture
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">STAGE 1 // GARMIN OAUTH2 PKCE</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">OAuth Handshake with S256 Code Challenge</div>
+                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Exchanges authorization code for Garmin access token and retrieves permanent Garmin User ID.</div>
+                </div>
+                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">STAGE 2 // HISTORICAL PACKAGE INGESTION</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Single-Zip Extraction & Multi-Script ML Initialization</div>
+                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Executes preprocess, features, fatigue, capacities, and severity python engines sequentially.</div>
+                </div>
+                <div style="border-left: 1px solid #1F2937; padding-left: 12px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00;">STAGE 3 // REAL-TIME WEBHOOK INGESTION</div>
+                    <div style="font-size: 0.85rem; color: #CBD5E1; font-weight: 500; margin-top: 2px;">Push Notifications for Completed Workouts</div>
+                    <div style="font-size: 0.78rem; color: #64748B; margin-top: 2px;">Continuous listener at /api/sync/activities automatically updating fatigue and capacity metrics.</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Configure Sensor Baseline Profile", use_container_width=True):
+            st.session_state["selected_page"] = "Setup Form"
+            st.rerun()

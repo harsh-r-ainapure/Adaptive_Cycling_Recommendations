@@ -22,7 +22,7 @@ WHERE user_id = %s
 ORDER BY activity_date
 """
 
-df_activity = pd.read_sql_query(query1, conn, params=(user_id,))
+df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
 
 df_activity = df_activity.rename(columns={
     "id": "Activity UUID",
@@ -109,4 +109,3 @@ for _, row in df.iterrows():
 conn.commit()
 
 cursor.close()
-

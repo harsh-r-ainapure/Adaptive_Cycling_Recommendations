@@ -36,7 +36,7 @@ ORDER BY a.activity_date;
 
 df_predictions = pd.read_sql_query(
     query3,
-    conn,
+    conn,  # type: ignore
     params=(user_id,)
 )
 

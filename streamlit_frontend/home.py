@@ -9,7 +9,7 @@ def show_homepage():
     # Top Telemetry Status Header
     hud_c1, hud_c2 = st.columns([7, 2])
     with hud_c1:
-        status_tag = '<span class="tech-tag live">LINKED // INTERVALS.ICU</span>' if is_connected else '<span class="tech-tag">UNLINKED // INTERVALS.ICU</span>'
+        status_tag = '<span class="tech-tag live">LINKED // GARMIN CONNECT</span>' if is_connected else '<span class="tech-tag">UNLINKED // GARMIN CONNECT</span>'
         st.markdown(f"""
         <div style="display: flex; align-items: center; gap: 12px; margin-top: 4px;">
             <span class="tech-tag">ATHLETE: {user_name.upper()}</span>
@@ -52,7 +52,7 @@ def show_homepage():
         if not logo_path.exists():
             logo_path = BASE_DIR / "stravalogo.png"
         if logo_path.exists():
-            st.image(str(logo_path), caption="Integration: Intervals & Strava", use_container_width=True)
+            st.image(str(logo_path), caption="Integration: Garmin Connect", use_container_width=True)
 
     # Modular Workspace Grid
     st.markdown("""
@@ -89,15 +89,15 @@ def show_homepage():
         <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
             <div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Data Pipeline & Activity Sync</span>
+                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Data Pipeline & Garmin Ingestion</span>
                     <span class="tech-tag">INGEST</span>
                 </div>
                 <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
-                    Authenticate with Intervals.icu to fetch raw workout streams, sensor channels, and power streams for feature extraction.
+                    Authenticate with Garmin Health API and upload initial historical activity export (.zip) for baseline model training.
                 </p>
             </div>
             <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
-                PROTOCOL: OAUTH2 // REST INGESTION
+                PROTOCOL: GARMIN PKCE // WEBHOOK PUSH
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -165,7 +165,7 @@ def show_homepage():
         </div>
         <div>
             <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">INGESTION SOURCE</div>
-            <div style="font-size: 0.85rem; font-weight: 600; color: #CBD5E1; margin-top: 3px;">Intervals.icu API</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #CBD5E1; margin-top: 3px;">Garmin Health API & Webhooks</div>
         </div>
         <div>
             <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #64748B; text-transform: uppercase;">SAMPLING WINDOW</div>

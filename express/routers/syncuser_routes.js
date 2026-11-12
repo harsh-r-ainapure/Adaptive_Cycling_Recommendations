@@ -1,7 +1,5 @@
 import express from "express";
-
 import authenticate from "../middleware/authmiddleware.js";
-
 import {
     signup_redirectt,
     signup_callback,
@@ -10,10 +8,13 @@ import {
 
 const router = express.Router();
 
+// Route to initiate Garmin OAuth flow
 router.get("/signup", signup_redirectt);
 
+// Garmin OAuth callback route (matches your registered Garmin Developer portal URL)
 router.get("/callback", signup_callback);
 
+// Save user profile settings (power meter preferences, etc.)
 router.post(
     "/profile",
     authenticate,

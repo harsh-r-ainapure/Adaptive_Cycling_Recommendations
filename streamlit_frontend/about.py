@@ -62,7 +62,7 @@ def show_about_page():
                 Pipeline Architecture
             </div>
             <ul style="color: #94A3B8; font-size: 0.85rem; line-height: 1.8; margin-left: -15px;">
-                <li><strong style="color: #F1F5F9;">Ingestion Layer:</strong> REST-based tokenized sync with Intervals.icu and Strava.</li>
+                <li><strong style="color: #F1F5F9;">Ingestion Layer:</strong> Garmin Health API integration with automated push webhooks and historical archive processing.</li>
                 <li><strong style="color: #F1F5F9;">Feature Engineering:</strong> Preprocessing of raw sensor time-series and outlier clipping.</li>
                 <li><strong style="color: #F1F5F9;">Baseline Computation:</strong> Multi-week rolling averages for heart rate, elevation, and volume.</li>
                 <li><strong style="color: #F1F5F9;">Serving Layer:</strong> Streamlit wide telemetry dashboard coupled to Express API backend.</li>

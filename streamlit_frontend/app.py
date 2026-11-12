@@ -148,12 +148,12 @@ with st.sidebar:
     user_jwt = st.session_state.get("jwt")
     if user_jwt:
         st.markdown(
-            '<div style="margin-bottom: 16px;"><span class="tech-tag live">INTERVALS: AUTHENTICATED</span></div>',
+            '<div style="margin-bottom: 16px;"><span class="tech-tag live">GARMIN: AUTHENTICATED</span></div>',
             unsafe_allow_html=True
         )
     else:
         st.markdown(
-            '<div style="margin-bottom: 16px;"><span class="tech-tag">INTERVALS: UNLINKED</span></div>',
+            '<div style="margin-bottom: 16px;"><span class="tech-tag">GARMIN: UNLINKED</span></div>',
             unsafe_allow_html=True
         )
 
@@ -271,7 +271,7 @@ elif selected_page == "Adaptive Cycling Coach":
                 SESSION UNLINKED
             </div>
             <div style="color: #CBD5E1; font-size: 0.9rem; margin-bottom: 14px;">
-                No authenticated session detected. Please connect your Intervals.icu account on the Sync workspace to stream athlete activity.
+                No authenticated session detected. Please connect your Garmin Connect account on the Sync workspace to stream athlete activity.
             </div>
         </div>
         """, unsafe_allow_html=True)

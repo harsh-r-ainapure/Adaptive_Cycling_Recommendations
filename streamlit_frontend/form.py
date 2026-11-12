@@ -25,7 +25,7 @@ def show_form_page():
     """, unsafe_allow_html=True)
 
     if not is_connected:
-        st.info("Intervals.icu account is unlinked. You can complete the profile now, but saving requires an authenticated session.")
+        st.info("Garmin Connect account is unlinked. You can complete the profile now, but saving requires an authenticated session.")
 
     form_col, info_col = st.columns([7, 4], gap="large")
 
@@ -107,7 +107,7 @@ def show_form_page():
                 st.stop()
 
             if not jwt:
-                st.error("Authentication required. Please connect your Intervals.icu account on the Sync page before saving.")
+                st.error("Authentication required. Please connect your Garmin Connect account on the Sync page before saving.")
                 st.stop()
 
             month_number = None
@@ -129,7 +129,7 @@ def show_form_page():
             try:
                 with st.spinner("Writing calibration parameters to database..."):
                     response = requests.post(
-                        f"{BACKEND}/api/user/profile",
+                        f"{BACKEND}/api/auth/garmin/profile",
                         json=payload,
                         headers={
                             "Authorization": f"Bearer {jwt}"

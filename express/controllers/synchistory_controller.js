@@ -99,21 +99,37 @@ export const handleHistoricalZipUpload = async (req, res) => {
             fs.copyFileSync(fitFile, path.join(fitFilesDir, fileName));
         }
 
-        // 3. Run the ML pipeline sequentially for baseline creation
-        await runPythonScript("preprocess.py", [userId]);
-        await runPythonScript("features.py", [fitFilesDir, userId]);
-        await runPythonScript("fatigue.py", [userId]);
-        await runPythonScript("capacities.py", [userId]);
-        await runPythonScript("severity.py", [userId]);
+        // 3. Send immediate response to prevent Render timeout (HTTP 202 Accepted)
+        res.status(202).json({ 
+            message: "Historical import started in the background. Baseline models are initializing." 
+        });
 
-        // 4. Cleanup temporary files
-        fs.rmSync(zipPath, { force: true });
-        fs.rmSync(extractDir, { recursive: true, force: true });
-
-        res.json({ message: "First-time historical import completed. Baseline models initialized successfully." });
+        // 4. Run the ML pipeline asynchronously in the background
+        setImmediate(async () => {
+            try {
+                await runPythonScript("preprocess.py", [userId]);
+                await runPythonScript("features.py", [fitFilesDir, userId]);
+                await runPythonScript("fatigue.py", [userId]);
+                await runPythonScript("capacities.py", [userId]);
+                await runPythonScript("severity.py", [userId]);
+                console.log("Background historical import and ML pipeline completed successfully for user:", userId);
+            } catch (pyErr) {
+                console.error("Background ML pipeline failed:", pyErr);
+            } finally {
+                // Cleanup temporary files
+                try {
+                    fs.rmSync(zipPath, { force: true });
+                    fs.rmSync(extractDir, { recursive: true, force: true });
+                } catch (cleanupErr) {
+                    console.error("Cleanup error:", cleanupErr.message);
+                }
+            }
+        });
 
     } catch (err) {
         console.error("Historical import failed:", err);
-        res.status(500).json({ error: "Failed to process historical data package." });
+        if (!res.headersSent) {
+            res.status(500).json({ error: "Failed to process historical data package." });
+        }
     }
 };

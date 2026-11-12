@@ -1,6 +1,6 @@
 import express from "express";
 import { upload, handleHistoricalZipUpload } from "../controllers/synchistory_controller.js";
-import authenticate from "../middlewares/authmiddleware.js";
+import authenticate from "../middleware/authmiddleware.js";
 
 const router = express.Router();
 

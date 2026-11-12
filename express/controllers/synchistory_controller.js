@@ -54,10 +54,32 @@ export const handleHistoricalZipUpload = async (req, res) => {
         const extractDir = path.join("uploads", "extracted", userId);
         const fitFilesDir = path.join(extractDir, "fit_files");
 
-        // 2. Unzip and flatten .fit files
+        // 2. Unzip and flatten .fit files (with recursive nested zip extraction support)
         fs.mkdirSync(fitFilesDir, { recursive: true });
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(extractDir, true);
+
+        // Recursive function to unpack nested zip archives standard in Garmin exports
+        const extractNestedZips = (dir) => {
+            fs.readdirSync(dir).forEach(file => {
+                const filePath = path.join(dir, file);
+                if (fs.statSync(filePath).isDirectory()) {
+                    extractNestedZips(filePath);
+                } else if (file.toLowerCase().endsWith(".zip")) {
+                    try {
+                        const nestedZip = new AdmZip(filePath);
+                        const subDir = path.join(dir, path.basename(file, ".zip"));
+                        fs.mkdirSync(subDir, { recursive: true });
+                        nestedZip.extractAllTo(subDir, true);
+                        fs.rmSync(filePath, { force: true }); // Clean up parent zip
+                        extractNestedZips(subDir);
+                    } catch (e) {
+                        console.error(`Skipping invalid nested zip: ${filePath}`);
+                    }
+                }
+            });
+        };
+        extractNestedZips(extractDir);
 
         const walkSync = (dir, fileList = []) => {
             fs.readdirSync(dir).forEach(file => {

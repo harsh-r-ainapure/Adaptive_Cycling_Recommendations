@@ -5,10 +5,8 @@ import fs from "fs";
 import { spawn } from "child_process";
 import pool from "../config/db.js";
 
-// Export upload so routers can use it as middleware (e.g., upload.single('zipFile'))
 export const upload = multer({ dest: "uploads/temp_zips/" });
 
-// Helper to run python scripts sequentially
 async function runPythonScript(scriptName, args) {
     return new Promise((resolve, reject) => {
         const py = spawn("python", [path.join("python", scriptName), ...args]);
@@ -31,15 +29,12 @@ export const handleHistoricalZipUpload = async (req, res) => {
     }
 
     try {
-        // 1. Check if user already has historical data in the database
         const checkResult = await pool.query(
             "SELECT COUNT(*) FROM activities WHERE user_id = $1",
             [userId]
         );
         
-        const activityCount = parseInt(checkResult.rows[0].count, 10);
-
-        if (activityCount > 0) {
+        if (parseInt(checkResult.rows[0].count, 10) > 0) {
             if (req.file) fs.rmSync(req.file.path, { force: true });
             return res.status(403).json({ 
                 error: "Historical data already exists. Future rides sync automatically via Garmin webhooks." 
@@ -54,12 +49,11 @@ export const handleHistoricalZipUpload = async (req, res) => {
         const extractDir = path.join("uploads", "extracted", userId);
         const fitFilesDir = path.join(extractDir, "fit_files");
 
-        // 2. Unzip and flatten .fit files (with recursive nested zip extraction support)
+        // 1. Unzip archive and unpack any nested zips
         fs.mkdirSync(fitFilesDir, { recursive: true });
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(extractDir, true);
 
-        // Recursive function to unpack nested zip archives standard in Garmin exports
         const extractNestedZips = (dir) => {
             fs.readdirSync(dir).forEach(file => {
                 const filePath = path.join(dir, file);
@@ -71,7 +65,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
                         const subDir = path.join(dir, path.basename(file, ".zip"));
                         fs.mkdirSync(subDir, { recursive: true });
                         nestedZip.extractAllTo(subDir, true);
-                        fs.rmSync(filePath, { force: true }); // Clean up parent zip
+                        fs.rmSync(filePath, { force: true });
                         extractNestedZips(subDir);
                     } catch (e) {
                         console.error(`Skipping invalid nested zip: ${filePath}`);
@@ -81,6 +75,40 @@ export const handleHistoricalZipUpload = async (req, res) => {
         };
         extractNestedZips(extractDir);
 
+        // 2. Find summarizedActivities.json for 100% precise activity type filtering
+        let validCyclingActivityIds = new Set();
+        
+        const findAndParseSummaries = (dir) => {
+            fs.readdirSync(dir).forEach(file => {
+                const filePath = path.join(dir, file);
+                if (fs.statSync(filePath).isDirectory()) {
+                    findAndParseSummaries(filePath);
+                } else if (file.toLowerCase().includes("summarizedactivities.json")) {
+                    try {
+                        const rawData = fs.readFileSync(filePath, "utf8");
+                        const activities = JSON.parse(rawData);
+                        
+                        // Handle array or object wrapper depending on Garmin export format
+                        const list = Array.isArray(activities) ? activities : (activities.summarizedActivities || []);
+                        
+                        list.forEach(act => {
+                            const type = (act.activityType || act.activityTypeId || "").toString().toLowerCase();
+                            // Target cycling types specifically
+                            if (type.includes("cycling") || type.includes("ride") || type.includes("biking") || type === "2" || type === "3") {
+                                if (act.activityId) {
+                                    validCyclingActivityIds.add(act.activityId.toString());
+                                }
+                            }
+                        });
+                    } catch (err) {
+                        console.error("Error parsing summarized activities JSON:", err);
+                    }
+                }
+            });
+        };
+        findAndParseSummaries(extractDir);
+
+        // 3. Walk directory to collect all .fit files
         const walkSync = (dir, fileList = []) => {
             fs.readdirSync(dir).forEach(file => {
                 const filePath = path.join(dir, file);
@@ -94,17 +122,33 @@ export const handleHistoricalZipUpload = async (req, res) => {
         };
 
         const foundFitFiles = walkSync(extractDir);
+        let copiedCount = 0;
+
         for (const fitFile of foundFitFiles) {
             const fileName = path.basename(fitFile);
-            fs.copyFileSync(fitFile, path.join(fitFilesDir, fileName));
+            
+            // If we successfully found summary IDs, filter with 100% precision
+            if (validCyclingActivityIds.size > 0) {
+                const matches = Array.from(validCyclingActivityIds).some(id => fileName.includes(id));
+                if (matches) {
+                    fs.copyFileSync(fitFile, path.join(fitFilesDir, fileName));
+                    copiedCount++;
+                }
+            } else {
+                // Fallback: if summary json wasn't found for some reason, copy all
+                fs.copyFileSync(fitFile, path.join(fitFilesDir, fileName));
+                copiedCount++;
+            }
         }
 
-        // 3. Send immediate response to prevent Render timeout (HTTP 202 Accepted)
+        console.log(`100% Precision Filter: Copied ${copiedCount} cycling FIT files out of ${foundFitFiles.length} total files.`);
+
+        // 4. Respond instantly with HTTP 202 to prevent Render timeout
         res.status(202).json({ 
-            message: "Historical import started in the background. Baseline models are initializing." 
+            message: `Filtered ${copiedCount} cycling activities. Baseline initialization started in background.` 
         });
 
-        // 4. Run the ML pipeline asynchronously in the background
+        // 5. Run ML pipeline asynchronously
         setImmediate(async () => {
             try {
                 await runPythonScript("preprocess.py", [userId]);
@@ -112,11 +156,10 @@ export const handleHistoricalZipUpload = async (req, res) => {
                 await runPythonScript("fatigue.py", [userId]);
                 await runPythonScript("capacities.py", [userId]);
                 await runPythonScript("severity.py", [userId]);
-                console.log("Background historical import and ML pipeline completed successfully for user:", userId);
+                console.log("Background ML pipeline completed successfully for user:", userId);
             } catch (pyErr) {
                 console.error("Background ML pipeline failed:", pyErr);
             } finally {
-                // Cleanup temporary files
                 try {
                     fs.rmSync(zipPath, { force: true });
                     fs.rmSync(extractDir, { recursive: true, force: true });

@@ -20,14 +20,20 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(compression());
+app.use(cors());
 
+// Serve static files from the 'public' folder
 app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static("public"));
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-
-app.use(cors());
 
 app.use("/api/user", syncUserRoutes);
 

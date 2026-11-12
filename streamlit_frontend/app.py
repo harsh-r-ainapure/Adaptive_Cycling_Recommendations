@@ -2,15 +2,25 @@ import shutil
 from pathlib import Path
 import streamlit.file_util as file_util
 
-# Ensure logo.png and stravalogo.png are available in Streamlit's static root
+# Ensure logo assets are available in Streamlit's static root
 try:
     _static_dir = Path(file_util.get_static_dir())
-    _src_logo = Path(__file__).resolve().parent / "stravalogo.png"
-    if _src_logo.exists() and _static_dir.exists():
-        for _name in ["logo.png", "stravalogo.png"]:
-            _dest = _static_dir / _name
-            if not _dest.exists() or _dest.stat().st_size != _src_logo.stat().st_size:
-                shutil.copy2(_src_logo, _dest)
+    _src_dir = Path(__file__).resolve().parent
+    _logo_300 = _src_dir / "stravalogo-300x300.png"
+    _logo_fallback = _src_dir / "stravalogo.png"
+
+    if _static_dir.exists():
+        # Register stravalogo-300x300.png
+        if _logo_300.exists():
+            for _name in ["stravalogo-300x300.png", "logo.png", "stravalogo.png"]:
+                _dest = _static_dir / _name
+                if not _dest.exists() or _dest.stat().st_size != _logo_300.stat().st_size:
+                    shutil.copy2(_logo_300, _dest)
+        elif _logo_fallback.exists():
+            for _name in ["stravalogo-300x300.png", "logo.png", "stravalogo.png"]:
+                _dest = _static_dir / _name
+                if not _dest.exists() or _dest.stat().st_size != _logo_fallback.stat().st_size:
+                    shutil.copy2(_logo_fallback, _dest)
 except Exception:
     pass
 

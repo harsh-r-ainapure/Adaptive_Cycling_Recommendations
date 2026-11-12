@@ -48,7 +48,9 @@ def show_homepage():
 
     with logo_col:
         BASE_DIR = Path(__file__).parent
-        logo_path = BASE_DIR / "stravalogo.png"
+        logo_path = BASE_DIR / "stravalogo-300x300.png"
+        if not logo_path.exists():
+            logo_path = BASE_DIR / "stravalogo.png"
         if logo_path.exists():
             st.image(str(logo_path), caption="Integration: Intervals & Strava", use_container_width=True)
 

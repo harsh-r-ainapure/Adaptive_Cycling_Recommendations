@@ -23,9 +23,7 @@ user_id = sys.argv[2]
 
 print(f"[preprocess.py] Scanning {temp_folder} for summarized activities...")
 
-# 1. Parse summarizedActivities.json and insert/sync into 'activities' table
 cursor = conn.cursor()
-
 inserted_count = 0
 
 def process_summaries(dir_path):
@@ -66,7 +64,7 @@ def process_summaries(dir_path):
                                 average_cadence, average_power, elevation_gain
                             )
                             VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (intervals_activity_id) DO NOTHING;
+                            ON CONFLICT DO NOTHING;
                             """
                             
                             cursor.execute(

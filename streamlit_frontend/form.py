@@ -61,6 +61,29 @@ def show_form_page():
                 help="True mechanical power readings enhance the Random Forest model's training accuracy."
             )
 
+            if has_power == "No":
+                st.markdown("""
+                <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); border-left: 3px solid #EF4444; border-radius: 6px; padding: 12px 14px; margin-top: 14px; margin-bottom: 6px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #EF4444; text-transform: uppercase; margin-bottom: 4px;">
+                        HARDWARE NOTICE // POWER METER REQUIRED FOR OPTIMAL PREDICTIONS
+                    </div>
+                    <div style="color: #FCA5A5; font-size: 0.83rem; line-height: 1.5;">
+                        A power meter is necessary for correct predictions and smooth working of the system. Without direct mechanical strain gauge readings, the pipeline must rely on approximated power estimates. If you still want to proceed without a power meter, you can continue.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif has_power == "I'm not sure":
+                st.markdown("""
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-left: 3px solid #F59E0B; border-radius: 6px; padding: 12px 14px; margin-top: 14px; margin-bottom: 6px;">
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-weight: 600; color: #F59E0B; text-transform: uppercase; margin-bottom: 4px;">
+                        HARDWARE CONFIGURATION NOTICE
+                    </div>
+                    <div style="color: #FCD34D; font-size: 0.83rem; line-height: 1.5;">
+                        Direct power sensor data significantly improves baseline physiological accuracy. If your cycling computer or smart trainer records mechanical Watts, choosing "Yes" provides the highest model precision.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
             start_month = None
             start_year = None
 

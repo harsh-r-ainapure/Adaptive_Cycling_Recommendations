@@ -100,8 +100,8 @@ def load_data(jwt):
 
 PAGES = [
     "Home",
-    "Sync",
     "Setup Form",
+    "Sync",
     "Adaptive Cycling Coach",
     "About",
     "Privacy Policy",

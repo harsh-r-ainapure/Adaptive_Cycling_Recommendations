@@ -1,13 +1,238 @@
 import streamlit as st
 import requests
+import base64
+import json
+import streamlit.components.v1 as components
 
 BACKEND = "https://adaptive-cycling-recommendations.onrender.com"
 
 # -------------------------
-# Initialize Session
+# Initialize Session Keys
 # -------------------------
 if "jwt" not in st.session_state:
     st.session_state["jwt"] = None
+if "sync_in_progress" not in st.session_state:
+    st.session_state["sync_in_progress"] = False
+if "sync_status" not in st.session_state:
+    st.session_state["sync_status"] = "idle"
+if "notify_me" not in st.session_state:
+    st.session_state["notify_me"] = True
+if "notified_for_current_sync" not in st.session_state:
+    st.session_state["notified_for_current_sync"] = False
+
+
+def get_user_id_from_jwt(token):
+    """Decodes user ID from JWT payload without external libraries."""
+    if not token:
+        return None
+    try:
+        parts = token.split(".")
+        if len(parts) >= 2:
+            payload = parts[1]
+            padded = payload + "=" * ((4 - len(payload) % 4) % 4)
+            data = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+            return str(data.get("id"))
+    except Exception:
+        pass
+    return None
+
+
+def request_notification_permission():
+    """Requests native browser notification permission."""
+    components.html("""
+    <script>
+    (function() {
+        var notif = (window.parent && window.parent.Notification) ? window.parent.Notification : window.Notification;
+        if (notif && notif.permission === "default") {
+            notif.requestPermission();
+        }
+    })();
+    </script>
+    """, height=0, width=0)
+
+
+def send_browser_notification(title, body):
+    """Fires native browser notification when historical sync completes."""
+    safe_title = title.replace('"', '\\"')
+    safe_body = body.replace('"', '\\"')
+    components.html(f"""
+    <script>
+    (function() {{
+        var notif = (window.parent && window.parent.Notification) ? window.parent.Notification : window.Notification;
+        if (notif) {{
+            if (notif.permission === "granted") {{
+                new notif("{safe_title}", {{
+                    body: "{safe_body}",
+                    icon: "/static/stravalogo-300x300.png"
+                }});
+            }} else if (notif.permission !== "denied") {{
+                notif.requestPermission().then(function(perm) {{
+                    if (perm === "granted") {{
+                        new notif("{safe_title}", {{
+                            body: "{safe_body}",
+                            icon: "/static/stravalogo-300x300.png"
+                        }});
+                    }}
+                }});
+            }}
+        }}
+    }})();
+    </script>
+    """, height=0, width=0)
+
+
+@st.fragment(run_every=4)
+def render_sync_status_monitor(jwt, user_id):
+    """
+    Background polling loop querying /api/history/sync-status/:userId every 4 seconds.
+    Renders non-intrusive interactive modal, handles notification toggle, and post-sync transitions.
+    """
+    if not jwt:
+        return
+
+    target_id = user_id or "me"
+    server_status = "idle"
+    try:
+        res = requests.get(
+            f"{BACKEND}/api/history/sync-status/{target_id}",
+            headers={"Authorization": f"Bearer {jwt}"},
+            timeout=5
+        )
+        if res.status_code == 200:
+            server_status = res.json().get("status", "idle")
+    except Exception:
+        server_status = st.session_state.get("sync_status", "idle")
+
+    # Sync state transitions
+    if server_status == "processing":
+        st.session_state["sync_in_progress"] = True
+        st.session_state["sync_status"] = "processing"
+        st.session_state["notified_for_current_sync"] = False
+
+    elif server_status == "completed":
+        was_processing = st.session_state.get("sync_in_progress") or (st.session_state.get("sync_status") == "processing")
+        st.session_state["sync_in_progress"] = False
+        st.session_state["sync_status"] = "completed"
+
+        if was_processing and st.session_state.get("notify_me", True) and not st.session_state.get("notified_for_current_sync", False):
+            send_browser_notification(
+                "Garmin Telemetry Synchronized",
+                "Historical workout archive processed and baseline ML models trained. Dashboard unlocked!"
+            )
+            st.session_state["notified_for_current_sync"] = True
+
+    elif server_status == "failed":
+        st.session_state["sync_in_progress"] = False
+        st.session_state["sync_status"] = "failed"
+
+    # ----------------------------------------------------
+    # Case 1: Active Ingestion Modal (Non-intrusive popup)
+    # ----------------------------------------------------
+    if st.session_state.get("sync_status") == "processing":
+        st.markdown("""
+        <div style="background: #0B0E15; border: 1px solid #1E283A; border-left: 4px solid #FF4B00; border-radius: 8px; padding: 20px 22px; margin-bottom: 22px; box-shadow: 0 4px 24px rgba(0,0,0,0.45);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="tech-tag active">PIPELINE PROCESSING</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #94A3B8;">
+                        POLLING STATUS // 4-SECOND INTERVAL
+                    </span>
+                </div>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #10B981; letter-spacing: 0.05em;">
+                    SAFE TO NAVIGATE AWAY
+                </span>
+            </div>
+            <div style="font-size: 1.15rem; font-weight: 600; color: #F8FAFC; margin-bottom: 6px;">
+                Garmin Historical Telemetry Ingestion Active
+            </div>
+            <p style="color: #94A3B8; font-size: 0.85rem; line-height: 1.55; margin: 0 0 14px 0;">
+                The server is extracting cycling FIT files, calculating training loads, and training your Random Forest power regressor. You can safely continue working, calibrate sensors in the sidebar, or navigate to other workspaces without interrupting execution.
+            </p>
+            <div style="background: #07090E; border: 1px solid #161D2B; border-radius: 6px; padding: 12px 16px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #FF4B00; text-transform: uppercase;">
+                    CURRENT EXECUTION STAGE
+                </div>
+                <div style="font-size: 0.84rem; color: #CBD5E1; margin-top: 3px; font-weight: 500;">
+                    Micro-Batch Feature Engineering & Global ML Initialization
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        ctrl_col1, ctrl_col2 = st.columns([3, 1])
+        with ctrl_col1:
+            notify_val = st.toggle(
+                "Notify me via browser notification upon completion",
+                value=st.session_state.get("notify_me", True),
+                key="sync_notify_toggle"
+            )
+            if notify_val != st.session_state.get("notify_me"):
+                st.session_state["notify_me"] = notify_val
+                if notify_val:
+                    request_notification_permission()
+
+        with ctrl_col2:
+            if st.button("Poll Endpoint Now", use_container_width=True, key="btn_manual_poll"):
+                st.rerun(scope="fragment")
+
+    # ----------------------------------------------------
+    # Case 2: Post-Sync Transition Card
+    # ----------------------------------------------------
+    elif st.session_state.get("sync_status") == "completed":
+        st.markdown("""
+        <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 4px solid #10B981; border-radius: 8px; padding: 20px 22px; margin-bottom: 22px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="tech-tag live">PIPELINE COMPLETED</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #10B981;">
+                    STATUS: READY // BASELINE MODEL TRAINED
+                </span>
+            </div>
+            <div style="font-size: 1.15rem; font-weight: 600; color: #F8FAFC; margin-bottom: 6px;">
+                Historical Baseline Calibrated Successfully
+            </div>
+            <p style="color: #94A3B8; font-size: 0.85rem; line-height: 1.55; margin: 0 0 16px 0;">
+                All cycling workouts from your Garmin data archive have been processed. Rolling fatigue curves, baseline variance, and adaptive workout prescriptions are unlocked and ready for inspection.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        trans_c1, trans_c2 = st.columns([1, 1])
+        with trans_c1:
+            if st.button("Explore Coach & Telemetry Dashboard ➔", type="primary", use_container_width=True, key="btn_goto_dash_post_sync"):
+                st.cache_data.clear()
+                st.session_state["selected_page"] = "Adaptive Cycling Coach"
+                st.rerun()
+
+        with trans_c2:
+            if st.button("Dismiss Status Banner", use_container_width=True, key="btn_dismiss_completed_hub"):
+                st.session_state["sync_status"] = "idle"
+                st.rerun()
+
+    # ----------------------------------------------------
+    # Case 3: Pipeline Failure Notice
+    # ----------------------------------------------------
+    elif st.session_state.get("sync_status") == "failed":
+        st.markdown("""
+        <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 4px solid #EF4444; border-radius: 8px; padding: 20px 22px; margin-bottom: 22px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="tech-tag" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.35);">PIPELINE FAILED</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #EF4444;">
+                    EXECUTION TERMINATED
+                </span>
+            </div>
+            <div style="font-size: 1.15rem; font-weight: 600; color: #F8FAFC; margin-bottom: 6px;">
+                Historical Ingestion Error
+            </div>
+            <p style="color: #94A3B8; font-size: 0.85rem; line-height: 1.55; margin: 0 0 14px 0;">
+                The backend encountered an issue processing the uploaded package (e.g. no cycling FIT files matched summarizedActivities.json or an unexpected file format).
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Reset Status & Retry Upload", type="primary", key="btn_reset_failed_sync"):
+            st.session_state["sync_status"] = "idle"
+            st.session_state["sync_in_progress"] = False
+            st.rerun()
 
 
 def show_sync_page():
@@ -29,6 +254,7 @@ def show_sync_page():
 
     jwt = st.session_state.get("jwt")
     is_connected = bool(jwt)
+    user_id = get_user_id_from_jwt(jwt) if jwt else None
 
     # Header
     st.markdown("""
@@ -81,12 +307,21 @@ def show_sync_page():
         if is_connected:
             if st.button("Revoke Session", use_container_width=True):
                 st.session_state["jwt"] = None
+                st.session_state["sync_status"] = "idle"
+                st.session_state["sync_in_progress"] = False
                 st.rerun()
         else:
             if st.button("Reload Status", use_container_width=True):
                 st.rerun()
 
     st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------------
+    # BACKGROUND STATUS POLLING & INTERACTIVE MODAL COMPONENT
+    # (Polls /api/history/sync-status/:userId every 4s)
+    # --------------------------------------------------------
+    if is_connected:
+        render_sync_status_monitor(jwt, user_id)
 
     # Tabs for Data Pipeline Operations
     tab_history, tab_webhooks, tab_architecture = st.tabs([
@@ -141,11 +376,11 @@ def show_sync_page():
                     "Import Historical Data & Train ML Models",
                     type="primary",
                     use_container_width=True,
-                    disabled=(uploaded_zip is None)
+                    disabled=(uploaded_zip is None or st.session_state.get("sync_status") == "processing")
                 )
 
                 if upload_btn and uploaded_zip is not None:
-                    with st.spinner("Processing archive: unpacking .fit files, preprocessing telemetry, extracting features, and training baseline ML models... (this may take up to a few minutes)"):
+                    with st.spinner("Uploading Garmin archive package to backend pipeline..."):
                         try:
                             files = {
                                 "zipFile": (uploaded_zip.name, uploaded_zip.getvalue(), "application/zip")
@@ -158,21 +393,15 @@ def show_sync_page():
                                 f"{BACKEND}/api/history/upload-history",
                                 headers=headers,
                                 files=files,
-                                timeout=600
+                                timeout=120
                             )
 
-                            if res.status_code == 200:
-                                st.success("Historical data package processed successfully! Baseline models initialized.")
-                                try:
-                                    res_json = res.json()
-                                    st.json(res_json)
-                                except Exception:
-                                    st.write(res.text)
-
-                                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-                                if st.button("Launch Coach Dashboard ➔", key="goto_dash_post_history"):
-                                    st.session_state["selected_page"] = "Adaptive Cycling Coach"
-                                    st.rerun()
+                            if res.status_code in [200, 202]:
+                                st.session_state["sync_in_progress"] = True
+                                st.session_state["sync_status"] = "processing"
+                                st.session_state["notified_for_current_sync"] = False
+                                st.toast("Upload received! Background pipeline initiated.")
+                                st.rerun()
 
                             elif res.status_code == 403:
                                 st.info("Historical data already exists in database. Baseline initialized. Future rides synchronize automatically via Garmin webhooks.")

@@ -146,11 +146,18 @@ with st.sidebar:
 
     # Auth Status in Sidebar
     user_jwt = st.session_state.get("jwt")
+    sync_active = st.session_state.get("sync_in_progress") or (st.session_state.get("sync_status") == "processing")
     if user_jwt:
-        st.markdown(
-            '<div style="margin-bottom: 16px;"><span class="tech-tag live">GARMIN: AUTHENTICATED</span></div>',
-            unsafe_allow_html=True
-        )
+        if sync_active:
+            st.markdown(
+                '<div style="margin-bottom: 16px;"><span class="tech-tag active">GARMIN: INGESTING</span></div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                '<div style="margin-bottom: 16px;"><span class="tech-tag live">GARMIN: AUTHENTICATED</span></div>',
+                unsafe_allow_html=True
+            )
     else:
         st.markdown(
             '<div style="margin-bottom: 16px;"><span class="tech-tag">GARMIN: UNLINKED</span></div>',

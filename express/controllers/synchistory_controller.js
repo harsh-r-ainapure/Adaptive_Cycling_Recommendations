@@ -44,7 +44,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
 
     try {
         const checkResult = await pool.query(
-            "SELECT COUNT(*) FROM activities WHERE user_id = $1",
+            "SELECT COUNT(*) FROM activities WHERE user_id = \$1",
             [userId]
         );
 
@@ -100,6 +100,12 @@ export const handleHistoricalZipUpload = async (req, res) => {
             let pipelineOk = false;
 
             try {
+                // Set status to processing
+                await pool.query(
+                    "UPDATE users SET historical_sync_status = 'processing' WHERE id = \$1",
+                    [userId]
+                ).catch(() => {}); // Fallback silently if users table schema varies
+
                 // 3. Find cycling FIT files by CONTENT (sport + start time vs summarizedActivities.json).
                 //    Garmin FIT filenames are upload IDs, NOT activityIds, so filename matching can't work.
                 const matchFile = path.join(extractDir, "cycling_matches.json");
@@ -171,10 +177,23 @@ export const handleHistoricalZipUpload = async (req, res) => {
                 await runPythonScript("recommendation.py", [userId], "Global-Finalize");
 
                 pipelineOk = true;
+                
+                // Update status to completed
+                await pool.query(
+                    "UPDATE users SET historical_sync_status = 'completed' WHERE id = \$1",
+                    [userId]
+                ).catch(() => {});
+
                 console.log(`[Pipeline] SUCCESS: Imported ${matches.length} cycling rides and ran ML pipeline for user: ${userId}`);
 
             } catch (pyErr) {
                 console.error("[Pipeline] ERROR:", pyErr.message || pyErr);
+                
+                // Update status to failed
+                await pool.query(
+                    "UPDATE users SET historical_sync_status = 'failed' WHERE id = \$1",
+                    [userId]
+                ).catch(() => {});
             } finally {
                 try {
                     fs.rmSync(zipPath, { force: true });
@@ -192,5 +211,22 @@ export const handleHistoricalZipUpload = async (req, res) => {
         if (!res.headersSent) {
             res.status(500).json({ error: "Failed to process historical data package." });
         }
+    }
+};
+
+// Optional status check endpoint helper
+export const getSyncStatus = async (req, res) => {
+    const userId = req.params.userId || req.user?.id;
+    if (!userId) return res.status(400).json({ error: "User ID missing." });
+    
+    try {
+        const result = await pool.query(
+            "SELECT historical_sync_status FROM users WHERE id = \$1",
+            [userId]
+        );
+        if (result.rows.length === 0) return res.json({ status: "idle" });
+        res.json({ status: result.rows[0].historical_sync_status || "idle" });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch sync status." });
     }
 };

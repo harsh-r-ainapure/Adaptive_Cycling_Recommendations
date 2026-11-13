@@ -55,10 +55,11 @@ export const handleHistoricalZipUpload = async (req, res) => {
         const zipPath = req.file.path;
         const extractDir = path.join("uploads", "extracted", userId);
 
-        // 1. Unzip archive and unpack nested zips
+        // 1. Unzip archive and delete main zip immediately to free disk space
         console.log(`[Setup] Extracting ZIP package for user: ${userId}`);
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(extractDir, true);
+        fs.rmSync(zipPath, { force: true });
 
         const extractNestedZips = (dir) => {
             fs.readdirSync(dir).forEach(file => {
@@ -75,6 +76,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
                         extractNestedZips(subDir);
                     } catch (e) {
                         console.error(`[Setup] Skipping invalid nested zip: ${filePath}`);
+                        fs.rmSync(filePath, { force: true });
                     }
                 }
             });
@@ -92,14 +94,30 @@ export const handleHistoricalZipUpload = async (req, res) => {
                 } else if (file.toLowerCase().includes("summarizedactivities.json")) {
                     try {
                         const rawData = fs.readFileSync(filePath, "utf8");
-                        const activities = JSON.parse(rawData);
-                        const list = Array.isArray(activities) ? activities : (activities.summarizedActivities || []);
+                        const parsed = JSON.parse(rawData);
+                        
+                        // Handle Garmin's [{"summarizedActivitiesExport": [...]}] wrapper
+                        let list = [];
+                        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].summarizedActivitiesExport) {
+                            list = parsed[0].summarizedActivitiesExport;
+                        } else if (Array.isArray(parsed)) {
+                            list = parsed;
+                        } else if (parsed && parsed.summarizedActivitiesExport) {
+                            list = parsed.summarizedActivitiesExport;
+                        } else if (parsed && parsed.summarizedActivities) {
+                            list = parsed.summarizedActivities;
+                        }
                         
                         list.forEach(act => {
+                            if (!act || typeof act !== "object") return;
                             const type = (act.activityType || act.activityTypeId || "").toString().toLowerCase();
-                            if (type.includes("cycling") || type.includes("ride") || type.includes("biking") || type === "2" || type === "3") {
-                                if (act.activityId) {
-                                    validCyclingActivityIds.add(act.activityId.toString());
+                            if (
+                                type.includes("cycling") || 
+                                type.includes("ride") || 
+                                type.includes("biking")
+                            ) {
+                                if (act.activityId !== undefined && act.activityId !== null) {
+                                    validCyclingActivityIds.add(act.activityId.toString().trim());
                                 }
                             }
                         });
@@ -110,8 +128,9 @@ export const handleHistoricalZipUpload = async (req, res) => {
             });
         };
         findAndParseSummaries(extractDir);
+        console.log(`[Filter] Found ${validCyclingActivityIds.size} valid cycling activity IDs in JSON summary.`);
 
-        // 3. Collect all .fit files and filter for cycling
+        // 3. Collect all .fit files, filter by exact numeric ID, and DELETE non-cycling files immediately
         const walkSync = (dir, fileList = []) => {
             fs.readdirSync(dir).forEach(file => {
                 const filePath = path.join(dir, file);
@@ -125,13 +144,19 @@ export const handleHistoricalZipUpload = async (req, res) => {
         };
 
         const foundFitFiles = walkSync(extractDir);
-        const cyclingFitFiles = foundFitFiles.filter(fitFile => {
-            const fileName = path.basename(fitFile);
-            if (validCyclingActivityIds.size > 0) {
-                return Array.from(validCyclingActivityIds).some(id => fileName.includes(id));
+        const cyclingFitFiles = [];
+
+        for (const fitFile of foundFitFiles) {
+            const base = path.basename(fitFile, path.extname(fitFile)); // e.g., mrudulaainapure0@gmail.com_203139416105
+            const numericId = base.split("_").pop().split("-")[0].trim();
+
+            if (validCyclingActivityIds.has(numericId)) {
+                cyclingFitFiles.push(fitFile);
+            } else {
+                // Delete non-cycling FIT file immediately to free container RAM/disk
+                fs.rmSync(fitFile, { force: true });
             }
-            return true;
-        });
+        }
 
         console.log(`[Filter] Filtered down to ${cyclingFitFiles.length} cycling files out of ${foundFitFiles.length} total files.`);
 
@@ -142,7 +167,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
 
         // 5. Run ML pipeline asynchronously with detailed micro-batch logs
         setImmediate(async () => {
-            const BATCH_SIZE = 100;
+            const BATCH_SIZE = 50;
             const batches = [];
             for (let i = 0; i < cyclingFitFiles.length; i += BATCH_SIZE) {
                 batches.push(cyclingFitFiles.slice(i, i + BATCH_SIZE));
@@ -150,7 +175,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
 
             try {
                 console.log(`[Pipeline] Initializing database baseline...`);
-                await runPythonScript("preprocess.py", [extractDir,userId], "Global-Setup");
+                await runPythonScript("preprocess.py", [extractDir, userId], "Global-Setup");
 
                 for (let idx = 0; idx < batches.length; idx++) {
                     const batch = batches[idx];
@@ -162,13 +187,16 @@ export const handleHistoricalZipUpload = async (req, res) => {
                     fs.mkdirSync(batchDir, { recursive: true });
 
                     for (const fitFile of batch) {
-                        fs.copyFileSync(fitFile, path.join(batchDir, path.basename(fitFile)));
+                        if (fs.existsSync(fitFile)) {
+                            // Move instead of copy to avoid duplicating files in memory/disk
+                            fs.renameSync(fitFile, path.join(batchDir, path.basename(fitFile)));
+                        }
                     }
 
                     console.log(`[${batchLabel}] Processing ${batch.length} files with features.py...`);
                     await runPythonScript("features.py", [batchDir, userId], batchLabel);
 
-                    // Clean up batch folder to free memory immediately
+                    // Clean up batch folder and generated CSVs immediately
                     fs.rmSync(batchDir, { recursive: true, force: true });
                     console.log(`[${batchLabel}] Cleaned up batch directory from RAM/disk.`);
                 }
@@ -177,6 +205,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
                 await runPythonScript("fatigue.py", [userId], "Global-Finalize");
                 await runPythonScript("capacities.py", [userId], "Global-Finalize");
                 await runPythonScript("severity.py", [userId], "Global-Finalize");
+                await runPythonScript("recommendation.py", [userId], "Global-Finalize");
                 
                 console.log(`[Pipeline] SUCCESS: Historical import & ML pipeline fully completed for user: ${userId}`);
 

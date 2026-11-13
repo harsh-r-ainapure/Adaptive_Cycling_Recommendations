@@ -26,6 +26,14 @@ print(f"[preprocess.py] Scanning {temp_folder} for summarized activities...")
 cursor = conn.cursor()
 inserted_count = 0
 
+def safe_float(val, default=0.0):
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 def process_summaries(dir_path):
     global inserted_count
     for root, dirs, files in os.walk(dir_path):
@@ -35,36 +43,60 @@ def process_summaries(dir_path):
                 try:
                     with open(json_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                        list_acts = data if isinstance(data, list) else data.get("summarizedActivities", [])
+                        
+                        # Unpack Garmin's nested [{"summarizedActivitiesExport": [...]}] structure
+                        if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and "summarizedActivitiesExport" in data[0]:
+                            list_acts = data[0]["summarizedActivitiesExport"]
+                        elif isinstance(data, dict):
+                            list_acts = data.get("summarizedActivitiesExport", data.get("summarizedActivities", []))
+                        elif isinstance(data, list):
+                            list_acts = data
+                        else:
+                            list_acts = []
                         
                         for act in list_acts:
-                            activity_id = str(act.get("activityId", ""))
-                            if not activity_id:
+                            if not isinstance(act, dict):
                                 continue
+
+                            raw_id = act.get("activityId")
+                            if raw_id is None:
+                                continue
+                            activity_id = str(raw_id).strip()
                             
-                            activity_type = str(act.get("activityType", act.get("activityTypeId", "cycling"))).lower()
-                            if not any(t in activity_type for t in ["cycling", "ride", "biking", "2", "3"]):
+                            activity_type = str(act.get("activityType", act.get("activityTypeId", ""))).lower()
+                            if not any(t in activity_type for t in ["cycling", "ride", "biking", "virtual_ride", "indoor_cycling", "road_biking"]):
                                 continue
 
-                            activity_date = act.get("startTimeLocal", act.get("beginTimestamp"))
-                            distance = float(act.get("distance", 0.0))
-                            moving_time = float(act.get("duration", act.get("movingTime", 0.0)))
-                            elapsed_time = float(act.get("elapsedTime", moving_time))
-                            avg_speed = float(act.get("averageSpeed", 0.0))
-                            avg_hr = float(act.get("averageHR", 0.0))
-                            max_hr = float(act.get("maxHR", 0.0))
-                            avg_cadence = float(act.get("averageBikingCadence", act.get("averageCadence", 0.0)))
-                            avg_power = float(act.get("averagePower", 0.0))
-                            elevation_gain = float(act.get("elevationGain", 0.0))
+                            # Convert epoch milliseconds to ISO timestamp string
+                            raw_ts = act.get("startTimeLocal", act.get("beginTimestamp"))
+                            if isinstance(raw_ts, (int, float)):
+                                activity_date = pd.to_datetime(raw_ts, unit="ms").isoformat()
+                            elif raw_ts:
+                                activity_date = str(raw_ts)
+                            else:
+                                continue
 
+                            distance = safe_float(act.get("distance"))
+                            moving_time = safe_float(act.get("movingDuration", act.get("duration", act.get("movingTime"))))
+                            elapsed_time = safe_float(act.get("elapsedDuration", act.get("elapsedTime", moving_time)))
+                            avg_speed = safe_float(act.get("avgSpeed", act.get("averageSpeed")))
+                            avg_hr = safe_float(act.get("avgHr", act.get("averageHR")))
+                            max_hr = safe_float(act.get("maxHr", act.get("maxHR")))
+                            avg_cadence = safe_float(act.get("avgBikeCadence", act.get("averageBikingCadence", act.get("averageCadence"))))
+                            avg_power = safe_float(act.get("avgPower", act.get("averagePower")))
+                            elevation_gain = safe_float(act.get("elevationGain"))
+
+                            # Avoid duplicates even if intervals_activity_id has no UNIQUE constraint
                             insert_query = """
                             INSERT INTO activities (
                                 id, user_id, intervals_activity_id, activity_date, distance, 
                                 moving_time, elapsed_time, average_speed, average_hr, max_hr, 
                                 average_cadence, average_power, elevation_gain
                             )
-                            VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT DO NOTHING;
+                            SELECT gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM activities WHERE user_id = %s AND intervals_activity_id = %s
+                            );
                             """
                             
                             cursor.execute(
@@ -72,16 +104,18 @@ def process_summaries(dir_path):
                                 (
                                     user_id, activity_id, activity_date, distance,
                                     moving_time, elapsed_time, avg_speed, avg_hr, max_hr,
-                                    avg_cadence, avg_power, elevation_gain
+                                    avg_cadence, avg_power, elevation_gain,
+                                    user_id, activity_id
                                 )
                             )
-                            inserted_count += 1
+                            inserted_count += cursor.rowcount
                 except Exception as e:
                     print(f"Error parsing summary JSON {json_path}: {e}")
+                    conn.rollback()
 
 process_summaries(temp_folder)
 conn.commit()
 cursor.close()
 conn.close()
 
-print(f"[preprocess.py] Successfully synced {inserted_count} activity records into database baseline.")
+print(f"[preprocess.py] Successfully synced {inserted_count} cycling activity records into database baseline.")

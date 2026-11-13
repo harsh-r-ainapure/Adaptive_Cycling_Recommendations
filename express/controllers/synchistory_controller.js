@@ -150,7 +150,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
 
             try {
                 console.log(`[Pipeline] Initializing database baseline...`);
-                await runPythonScript("preprocess.py", [userId], "Global-Setup");
+                await runPythonScript("preprocess.py", [extractDir,userId], "Global-Setup");
 
                 for (let idx = 0; idx < batches.length; idx++) {
                     const batch = batches[idx];

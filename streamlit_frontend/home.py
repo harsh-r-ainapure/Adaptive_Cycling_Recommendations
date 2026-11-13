@@ -1,12 +1,13 @@
 import streamlit as st
 from pathlib import Path
 
+
 def show_homepage():
     user_name = st.session_state.get("user_name") or "Harsh"
     jwt = st.session_state.get("jwt")
     is_connected = bool(jwt)
 
-    # Top Telemetry Status Header
+    # Top Telemetry Status Header (HUD)
     hud_c1, hud_c2 = st.columns([7, 2])
     with hud_c1:
         status_tag = '<span class="tech-tag live">LINKED // GARMIN CONNECT</span>' if is_connected else '<span class="tech-tag">UNLINKED // GARMIN CONNECT</span>'
@@ -29,19 +30,19 @@ def show_homepage():
 
     st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
 
-    # Minimalist Header Section
+    # Minimalist Hero Header
     header_col, logo_col = st.columns([5, 1])
     with header_col:
         st.markdown("""
         <div style="border-left: 2px solid #FF4B00; padding-left: 18px; margin-bottom: 28px;">
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.12em; color: #FF4B00; text-transform: uppercase;">
                 ENDURANCE TELEMETRY PLATFORM
             </div>
             <h1 style="font-size: 2.2rem; font-weight: 700; color: #F8FAFC; margin: 6px 0 8px 0; letter-spacing: -0.02em;">
                 Adaptive Cycling Intelligence
             </h1>
-            <p style="color: #7A889B; font-size: 0.92rem; max-width: 680px; margin: 0; line-height: 1.5;">
-                Physiological fatigue modeling and machine-learned capacity reconstitution. Select an operational module below to inspect telemetry or trigger activity ingestion.
+            <p style="color: #7A889B; font-size: 0.92rem; max-width: 720px; margin: 0; line-height: 1.6;">
+                Physiological fatigue modeling and machine-learned capacity reconstitution. Follow the operating protocol below to calibrate your sensor hardware, import activity records, and review adaptive training prescriptions.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -54,103 +55,86 @@ def show_homepage():
         if logo_path.exists():
             st.image(str(logo_path), caption="Integration: Garmin Connect", use_container_width=True)
 
-    # Modular Workspace Grid
+    # Clean & Modern Instructions / System Protocol
     st.markdown("""
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; color: #64748B; text-transform: uppercase; margin-bottom: 12px;">
-        OPERATIONAL MODULES
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; color: #64748B; text-transform: uppercase; margin-bottom: 14px;">
+        OPERATING PROTOCOL // SYSTEM WORKFLOW
     </div>
     """, unsafe_allow_html=True)
 
-    m1, m2 = st.columns(2, gap="medium")
+    step_col1, step_col2 = st.columns(2, gap="large")
 
-    with m1:
+    with step_col1:
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Work Capacity & Recovery Coach</span>
-                    <span class="tech-tag active">CORE</span>
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
+                    STAGE 01 // SENSOR CALIBRATION
                 </div>
-                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
-                    Inspect rolling fatigue decay curves, baseline variance, and target prescriptions (distance, elevation, and heart rate caps) for upcoming training sessions.
-                </p>
+                <span class="tech-tag">CALIBRATION</span>
             </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
-                STATUS: READY // 3 TELEMETRY TRACKS
+            <div style="font-weight: 600; color: #F8FAFC; font-size: 1rem; margin-bottom: 6px;">
+                Hardware & Timeline Setup
             </div>
+            <p style="color: #7A889B; font-size: 0.83rem; line-height: 1.5; margin: 0;">
+                Navigate to <strong>Sensor Calibration</strong> in the sidebar. Specify whether your bicycle is equipped with a strain gauge power meter and set the installation month and year. This allows the machine learning pipeline to distinguish true recorded wattage from estimated power.
+            </p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Launch Coach Terminal", key="btn_coach", type="primary", use_container_width=True):
-            st.session_state["selected_page"] = "Adaptive Cycling Coach"
-            st.rerun()
 
-    with m2:
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Data Pipeline & Garmin Ingestion</span>
-                    <span class="tech-tag">INGEST</span>
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
+                    STAGE 03 // REAL-TIME WEBHOOK PUSH
                 </div>
-                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
-                    Authenticate with Garmin Health API and upload initial historical activity export (.zip) for baseline model training.
-                </p>
+                <span class="tech-tag live">AUTOMATED</span>
             </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
-                PROTOCOL: GARMIN PKCE // WEBHOOK PUSH
+            <div style="font-weight: 600; color: #F8FAFC; font-size: 1rem; margin-bottom: 6px;">
+                Continuous Automatic Ingestion
             </div>
+            <p style="color: #7A889B; font-size: 0.83rem; line-height: 1.5; margin: 0;">
+                Once your baseline archive is initialized, future rides sync with zero manual intervention. Completed activities recorded on your Garmin device automatically stream to the backend webhook listener, updating physiological decay curves in real time.
+            </p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Open Ingestion Hub", key="btn_sync", use_container_width=True):
-            st.session_state["selected_page"] = "Sync"
-            st.rerun()
 
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-    m3, m4 = st.columns(2, gap="medium")
-
-    with m3:
+    with step_col2:
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">Athlete Calibration & Sensors</span>
-                    <span class="tech-tag">CALIBRATE</span>
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
+                    STAGE 02 // HISTORICAL ARCHIVE IMPORT
                 </div>
-                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
-                    Configure power meter hardware availability, installation timestamp, and athlete profile specifications for clean ML baseline labeling.
-                </p>
+                <span class="tech-tag">INGESTION</span>
             </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
-                HARDWARE: STRAIN GAUGE CONFIG
+            <div style="font-weight: 600; color: #F8FAFC; font-size: 1rem; margin-bottom: 6px;">
+                Garmin OAuth & Archive Ingestion
             </div>
+            <p style="color: #7A889B; font-size: 0.83rem; line-height: 1.5; margin: 0;">
+                Navigate to <strong>Activity Synchronization</strong>. Authorize with Garmin Connect via OAuth2 PKCE, then upload your exported Garmin data archive (<code>.zip</code> package containing raw <code>.fit</code> files) to train the baseline Random Forest models.
+            </p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Calibrate Parameters", key="btn_form", use_container_width=True):
-            st.session_state["selected_page"] = "Setup Form"
-            st.rerun()
 
-    with m4:
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 12px; height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
-            <div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600; color: #F8FAFC; font-size: 1rem;">System Architecture & Spec</span>
-                    <span class="tech-tag">DOCS</span>
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
+                    STAGE 04 // COACH TERMINAL
                 </div>
-                <p style="color: #7A889B; font-size: 0.82rem; line-height: 1.45; margin: 0;">
-                    Technical documentation detailing the exponential decay fatigue engine, capacity deviation math, and Random Forest power regression.
-                </p>
+                <span class="tech-tag active">CORE</span>
             </div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
-                SPEC: MATHEMATICAL MODELING
+            <div style="font-weight: 600; color: #F8FAFC; font-size: 1rem; margin-bottom: 6px;">
+                Telemetry & Training Targets
             </div>
+            <p style="color: #7A889B; font-size: 0.83rem; line-height: 1.5; margin: 0;">
+                Open <strong>Coach & Telemetry</strong> to evaluate rolling fatigue curves, capacity variance, and training strain metrics. Review adaptive targets (distance, elevation, and heart rate ceiling) generated for your next workout session.
+            </p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Read Technical Spec", key="btn_about", use_container_width=True):
-            st.session_state["selected_page"] = "About"
-            st.rerun()
 
-    st.markdown("<div style='height: 18px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
     # Technical Specs Ribbon
     st.markdown("""

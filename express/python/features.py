@@ -19,26 +19,21 @@ print(temp_folder)
 print(user_id)
 
 def fit_to_csv(fit_path):
-
-    fitfile = FitFile(fit_path)
-
-    rows = []
-
-    for record in fitfile.get_messages("record"):
-
-        row = {}
-
-        for data in record:  # type: ignore
-
-            row[data.name] = data.value
-
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
-
     csv_path = fit_path.replace(".fit", ".csv")
+    try:
+        fitfile = FitFile(fit_path)
+        rows = []
+        for record in fitfile.get_messages("record"):
+            row = {}
+            for data in record:  # type: ignore
+                row[data.name] = data.value
+            rows.append(row)
 
-    df.to_csv(csv_path, index=False)
+        df = pd.DataFrame(rows)
+        df.to_csv(csv_path, index=False)
+    except Exception as e:
+        print(f"Error parsing FIT file {fit_path}: {e}")
+        pd.DataFrame().to_csv(csv_path, index=False)
 
     return csv_path
 
@@ -62,32 +57,37 @@ for file in os.listdir(temp_folder):
 
         csv_path = os.path.join(temp_folder, file)
 
-        ride_df = pd.read_csv(csv_path)
+        if os.path.getsize(csv_path) == 0:
+            print(f"Skipping empty CSV file: {file}")
+            continue
 
-        activity_id = os.path.splitext(file)[0]
+        try:
+            ride_df = pd.read_csv(csv_path)
+            if ride_df.empty or len(ride_df.columns) == 0:
+                print(f"Skipping CSV with no columns or rows: {file}")
+                continue
 
-        ride_df["Activity ID"] = activity_id
+            activity_id = os.path.splitext(file)[0]
 
-        csv_list.append(ride_df)
+            ride_df["Activity ID"] = activity_id
+
+            csv_list.append(ride_df)
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            print(f"Skipping malformed or empty CSV: {file}")
+            continue
+
+if not csv_list:
+    print("No valid CSV data found in this batch. Nothing to process, exiting cleanly.")
+    cursor = conn.cursor()
+    cursor.close()
+    conn.close()
+    sys.exit(0)
 
 df_fit = pd.concat(csv_list, ignore_index=True)
 
 # ------------------------------------------------------------
 # GUARANTEE REQUIRED SENSOR COLUMNS EXIST
 # ------------------------------------------------------------
-# Each FIT file only contains whatever fields the device actually
-# recorded. If every activity in this batch lacks a given field
-# (e.g. no power meter was paired), pandas never creates that
-# column in df_fit at all - it's not NaN, it's simply missing.
-# Every groupby/agg call below that references these columns
-# unconditionally will throw a KeyError in that case.
-#
-# Filling them in as all-NaN here means those activities will
-# naturally get filtered out downstream (e.g. by the
-# Power_Availability_Percent > 10 check) instead of crashing
-# the whole sync.
-# ------------------------------------------------------------
-
 required_fit_columns = [
     "power",
     "distance",
@@ -178,20 +178,6 @@ df_fit.info()
 # ------------------------------------------------------------
 # EXIT EARLY IF NOTHING SURVIVED THE POWER FILTER
 # ------------------------------------------------------------
-# Every groupby/apply call below assumes at least one row of
-# data exists. On an empty dataframe, pandas can't always infer
-# whether a lambda returns a scalar or a DataFrame (there's no
-# data to test it on), which causes confusing type errors like
-# reset_index(name=...) failing because .apply() unexpectedly
-# returned a DataFrame instead of a Series.
-#
-# Rather than defensively patching every downstream call, we
-# just stop here cleanly if this batch has no valid activities
-# left to process. This is expected/normal behavior (e.g. a
-# batch containing only a run or a ride with no power meter),
-# not a failure - so we exit with code 0, not an error.
-# ------------------------------------------------------------
-
 if df.empty:
 
     print("No activities in this batch passed the power-availability filter. Nothing to process, exiting cleanly.")
@@ -245,8 +231,6 @@ df = df.merge(
     on="Activity ID",
     how="left"
 )
-
-
 
 # FEATURE ENGINEERING
 
@@ -627,14 +611,10 @@ df["Stop_HR_Recovery_Percent"] = (
 )
 
 
-# Convert 'Activity Date' back to a true pandas datetime object
-# otherwise rolling('56D') expects an integer row count and throws an error
 df["Activity Date"] = pd.to_datetime(df["Activity Date"])
 
-# Ensure perfect chronological ordering for calendar windowing
 df = df.sort_values("Activity Date").reset_index(drop=True)
 
-# 56-day true calendar rolling baseline metric saved directly to df
 df["baseline_hr"] = (
     df
     .rolling(
@@ -645,20 +625,16 @@ df["baseline_hr"] = (
     .median()
 )
 
-# Backfill initial edge rows where the historical 5-ride cutoff hasn't been met yet
 df["baseline_hr"] = df["baseline_hr"].fillna(df["Average Heart Rate"].median())
 
-# Merge the clean baseline column into the telemetry dataframe for stream matching
 df_fit = df_fit.merge(
     df[["Activity ID", "baseline_hr"]],
     on="Activity ID",
     how="left"
 )
 
-# Quantify relative cardiorespiratory stress index
 df_fit["Relative_HR"] = df_fit["heart_rate"] / (df_fit["baseline_hr"] + 1e-6)
 
-# Map zone boundaries using individual historical strain context
 recovery_zone = (
     (df_fit["Relative_HR"] < 1.05)
     .groupby(df_fit["Activity ID"])
@@ -671,7 +647,6 @@ power_zone = (
     .mean() * 100
 ).reset_index(name="Power_Zone_Percent")
 
-# Merge zone distribution profiles into main dataframe
 df = df.merge(recovery_zone, on="Activity ID", how="left").fillna({"Recovery_Zone_Percent": 0})
 df = df.merge(power_zone, on="Activity ID", how="left").fillna({"Power_Zone_Percent": 0})
 

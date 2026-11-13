@@ -9,17 +9,27 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import cross_val_predict
 import os
 import sys
-from fitparse import FitFile
 from dotenv import load_dotenv
 import psycopg2
 
 load_dotenv()
 
-conn = psycopg2.connect(
-    os.getenv("SUPABASE_DB_URL")
-)
+db_url = os.getenv("SUPABASE_DB_URL")
+if not db_url:
+    print("Error: SUPABASE_DB_URL environment variable is not set.")
+    sys.exit(1)
 
-user_id = sys.argv[1]
+try:
+    conn = psycopg2.connect(db_url)
+except Exception as e:
+    print(f"Database connection failed: {e}")
+    sys.exit(1)
+
+user_id = sys.argv[1] if len(sys.argv) > 1 else None
+if not user_id:
+    print("Error: User ID argument missing for fatigue.py.")
+    conn.close()
+    sys.exit(1)
 
 query1 = """
 SELECT *
@@ -28,7 +38,17 @@ WHERE user_id = %s
 ORDER BY activity_date
 """
 
-df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
+try:
+    df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query activities: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_activity.empty:
+    print("No activity records found for this user. Skipping fatigue analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_activity = df_activity.rename(columns={
     "id": "Activity UUID",
@@ -55,7 +75,17 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
+try:
+    df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query activity features: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_features.empty:
+    print("No feature records found for this user. Skipping fatigue analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_features = df_features.rename(columns={
     "gradient": "Gradient",
@@ -100,12 +130,13 @@ FEATURE_COLUMNS = [
 
 before_count = len(df)
 
-df = df.dropna(subset=FEATURE_COLUMNS + ["Average Watts"])
+# Ensure Activity Date is not null before filtering
+df = df.dropna(subset=FEATURE_COLUMNS + ["Average Watts", "Activity Date"])
 
 dropped_count = before_count - len(df)
 
 if dropped_count > 0:
-    print(f"Dropped {dropped_count} row(s) with missing feature/power data.")
+    print(f"Dropped {dropped_count} row(s) with missing feature/power/date data.")
 
 MIN_ROWS_FOR_TRAINING = 5
 
@@ -118,17 +149,21 @@ if len(df) < MIN_ROWS_FOR_TRAINING:
     sys.exit(0)
 
 X = df[FEATURE_COLUMNS]
-
 Y = df["Average Watts"]
 
-model = xg.XGBRegressor(
-    max_depth=5,       
-    learning_rate=0.05, 
-    subsample=0.8,     
-    random_state=42
-)
+try:
+    model = xg.XGBRegressor(
+        max_depth=5,       
+        learning_rate=0.05, 
+        subsample=0.8,     
+        random_state=42
+    )
 
-model.fit(X, Y)
+    model.fit(X, Y)
+except Exception as e:
+    print(f"Model training failed: {e}")
+    conn.close()
+    sys.exit(0)
 
 print(X.dtypes)
 
@@ -155,8 +190,7 @@ feature_importance = (
     )
 )
 
-
-df["Fatigue"] = (((df["Estimated Power"] - df["Average Watts"])))
+df["Fatigue"] = df["Estimated Power"] - df["Average Watts"]
 
 print(df["Fatigue"])
 
@@ -184,7 +218,6 @@ print(
 print(
     outliers["Moving Time"].describe()
 )
-
 
 df["Activity Date"] = pd.to_datetime(
     df["Activity Date"]
@@ -218,9 +251,7 @@ def cum_fat_cal(df, k=0.15):
             
     return cum_fat 
 
-df["Cumulative_Fatigue"] = (
-    cum_fat_cal(df)
-)
+df["Cumulative_Fatigue"] = cum_fat_cal(df)
 
 print(
     df[
@@ -270,37 +301,42 @@ print(
     ]
 )
 
-cursor = conn.cursor()
+try:
+    cursor = conn.cursor()
 
-query4 = """
-INSERT INTO predictions (
-    activity_id,
-    estimated_power,
-    fatigue,
-    cumulative_fatigue
-)
-VALUES (%s, %s, %s, %s)
-ON CONFLICT (activity_id)
-DO UPDATE SET
-    estimated_power = EXCLUDED.estimated_power,
-    fatigue = EXCLUDED.fatigue,
-    cumulative_fatigue = EXCLUDED.cumulative_fatigue;
-"""
-
-for _, row in df.iterrows():
-    cursor.execute(
-        query4,
-        (
-            row["Activity UUID"],
-            float(row["Estimated Power"]),
-            float(row["Fatigue"]),
-            float(row["Cumulative_Fatigue"])
-        )
+    query4 = """
+    INSERT INTO predictions (
+        activity_id,
+        estimated_power,
+        fatigue,
+        cumulative_fatigue
     )
+    VALUES (%s, %s, %s, %s)
+    ON CONFLICT (activity_id)
+    DO UPDATE SET
+        estimated_power = EXCLUDED.estimated_power,
+        fatigue = EXCLUDED.fatigue,
+        cumulative_fatigue = EXCLUDED.cumulative_fatigue;
+    """
 
-conn.commit()
+    for _, row in df.iterrows():
+        cursor.execute(
+            query4,
+            (
+                row["Activity UUID"],
+                float(row["Estimated Power"]),
+                float(row["Fatigue"]),
+                float(row["Cumulative_Fatigue"])
+            )
+        )
 
-cursor.close()
-conn.close()
-
-print(f"Saved {len(df)} prediction rows.")
+    conn.commit()
+    cursor.close()
+    print(f"Saved {len(df)} prediction rows.")
+except Exception as e:
+    print(f"Database insertion failed: {e}")
+    if 'conn' in locals() and conn:
+        conn.rollback()
+finally:
+    if 'conn' in locals() and conn:
+        conn.close()

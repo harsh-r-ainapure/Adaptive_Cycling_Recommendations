@@ -9,17 +9,27 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import cross_val_predict
 import os
 import sys
-from fitparse import FitFile
 from dotenv import load_dotenv
 import psycopg2
 
 load_dotenv()
 
-conn = psycopg2.connect(
-    os.getenv("SUPABASE_DB_URL")
-)
+db_url = os.getenv("SUPABASE_DB_URL")
+if not db_url:
+    print("Error: SUPABASE_DB_URL environment variable is not set.")
+    sys.exit(1)
 
-user_id = sys.argv[1]
+try:
+    conn = psycopg2.connect(db_url)
+except Exception as e:
+    print(f"Database connection failed: {e}")
+    sys.exit(1)
+
+user_id = sys.argv[1] if len(sys.argv) > 1 else None
+if not user_id:
+    print("Error: User ID argument missing for recommendation.py.")
+    conn.close()
+    sys.exit(1)
 
 query3 = """
 SELECT
@@ -34,11 +44,21 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_predictions = pd.read_sql_query(
-    query3,
-    conn,  # type: ignore
-    params=(user_id,)
-)
+try:
+    df_predictions = pd.read_sql_query(
+        query3,
+        conn,  # type: ignore
+        params=(user_id,)
+    )
+except Exception as e:
+    print(f"Failed to query predictions for recommendation: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_predictions.empty:
+    print("No prediction records found for this user. Skipping recommendations.")
+    conn.close()
+    sys.exit(0)
 
 df_predictions = df_predictions.rename(columns={
     "activity_date": "Activity Date",
@@ -67,12 +87,23 @@ df = (
       .reset_index(drop=True)
 )
 
+if df.empty:
+    print("Processed dataframe is empty. Nothing to recommend.")
+    conn.close()
+    sys.exit(0)
+
 latest = df.iloc[-1]
 
 curr_date = latest["Activity Date"]
 cut_off_date = curr_date - pd.Timedelta(days=150)
 
 history = df[df["Activity Date"] >= cut_off_date].copy()
+
+# Safeguard baseline distance and elevation against zero or NaN to prevent division by zero
+df["Baseline_Dist"] = df["Baseline_Dist"].replace(0, 1.0).fillna(1.0)
+df["Baseline_Ele"] = df["Baseline_Ele"].replace(0, 1.0).fillna(1.0)
+history["Baseline_Dist"] = history["Baseline_Dist"].replace(0, 1.0).fillna(1.0)
+history["Baseline_Ele"] = history["Baseline_Ele"].replace(0, 1.0).fillna(1.0)
 
 history["Dist_Load_Ratio"] = (
     history["Last_Ride_Dist"] / history["Baseline_Dist"]
@@ -117,19 +148,20 @@ else:
     dist_low, dist_high = HARD_FLOOR, HARD_CEIL
     ele_low, ele_high = HARD_FLOOR, HARD_CEIL
 
-S = abs(latest["Severity"])
+S = abs(latest["Severity"]) if not pd.isna(latest["Severity"]) else 0.0
 
 Distance_Weight = 1 / (S + 1)
-
 Elevation_Weight = S / (S + 1)
 
-Dist_Load_Ratio = latest["Last_Ride_Dist"] / latest["Baseline_Dist"]
+base_dist = float(latest["Baseline_Dist"]) if not pd.isna(latest["Baseline_Dist"]) else 1.0
+base_ele = float(latest["Baseline_Ele"]) if not pd.isna(latest["Baseline_Ele"]) else 1.0
+base_hr = float(latest["Baseline_HR"]) if not pd.isna(latest["Baseline_HR"]) else 120.0
+last_dist = float(latest["Last_Ride_Dist"]) if not pd.isna(latest["Last_Ride_Dist"]) else 0.0
+last_ele = float(latest["Last_Ride_Ele"]) if not pd.isna(latest["Last_Ride_Ele"]) else 0.0
+pct_change = float(latest["Percent_Change"]) if not pd.isna(latest["Percent_Change"]) else 0.0
 
-Ele_Load_Ratio = (
-    latest["Last_Ride_Ele"] / latest["Baseline_Ele"]
-    if latest["Baseline_Ele"] > 0
-    else 1
-)
+Dist_Load_Ratio = last_dist / base_dist
+Ele_Load_Ratio = last_ele / base_ele if base_ele > 0 else 1.0
 
 Dist_Recovery_Factor = np.clip(
     2 - Dist_Load_Ratio,
@@ -147,7 +179,7 @@ severity_mean = history["Severity"].mean()
 severity_std = history["Severity"].std()
 
 if pd.isna(severity_std) or severity_std == 0:
-    severity_std = 1
+    severity_std = 1.0
 
 SEVERITY_BAND = 1.0
 
@@ -160,12 +192,13 @@ ALPHA_EXPANDED = 0.6
 
 ENDURANCE_THRESHOLD_KM = 110
 
+latest_severity = float(latest["Severity"]) if not pd.isna(latest["Severity"]) else 0.0
 is_out_of_band = (
-    latest["Severity"] < severity_low
-    or latest["Severity"] > severity_high
+    latest_severity < severity_low
+    or latest_severity > severity_high
 )
 
-is_endurance_ride = latest["Last_Ride_Dist"] > ENDURANCE_THRESHOLD_KM
+is_endurance_ride = last_dist > ENDURANCE_THRESHOLD_KM
 
 if is_endurance_ride:
     Alpha = ALPHA_EXPANDED
@@ -174,11 +207,11 @@ elif is_out_of_band:
 else:
     Alpha = ALPHA_BASE
 
-Chronic_Dist_Term = 1 + latest["Percent_Change"] * Distance_Weight
-Chronic_Ele_Term = 1 + latest["Percent_Change"] * Elevation_Weight
+Chronic_Dist_Term = 1 + pct_change * Distance_Weight
+Chronic_Ele_Term = 1 + pct_change * Elevation_Weight
 
 Recommended_Dist = (
-    latest["Baseline_Dist"]
+    base_dist
     *
     (
         (1 - Alpha) * Chronic_Dist_Term
@@ -188,7 +221,7 @@ Recommended_Dist = (
 )
 
 Recommended_Ele = (
-    latest["Baseline_Ele"]
+    base_ele
     *
     (
         (1 - Alpha) * Chronic_Ele_Term
@@ -198,28 +231,23 @@ Recommended_Ele = (
 )
 
 Recommended_HR = round(
-    latest["Baseline_HR"]
+    base_hr
     *
-    (1 + 0.5 * latest["Percent_Change"])
+    (1 + 0.5 * pct_change)
 )
 
-Recommended_Dist = round(
-    Recommended_Dist
-)
+Recommended_Dist = round(Recommended_Dist)
+Recommended_Ele = round(Recommended_Ele)
 
-Recommended_Ele = round(
-    Recommended_Ele
-)
+print("Severity :", latest_severity)
+print("Percent Change :", pct_change)
 
-print("Severity :", latest["Severity"])
-print("Percent Change :", latest["Percent_Change"])
+print("Baseline Distance :", base_dist)
+print("Baseline Elevation :", base_ele)
+print("Baseline HR :", base_hr)
 
-print("Baseline Distance :", latest["Baseline_Dist"])
-print("Baseline Elevation :", latest["Baseline_Ele"])
-print("Baseline HR :", latest["Baseline_HR"])
-
-print("Last Ride Distance :", latest["Last_Ride_Dist"])
-print("Last Ride Elevation :", latest["Last_Ride_Ele"])
+print("Last Ride Distance :", last_dist)
+print("Last Ride Elevation :", last_ele)
 
 print("Rides in 150-day window :", len(history))
 print("Dist clip bounds :", dist_low, dist_high)
@@ -237,37 +265,41 @@ print("Recommended Distance :", Recommended_Dist)
 print("Recommended Elevation :", Recommended_Ele)
 print("Recommended HR :", Recommended_HR)
 
-cursor = conn.cursor()
+try:
+    cursor = conn.cursor()
 
-query4 = """
-INSERT INTO recommendations (
-    activity_id,
-    recommended_distance,
-    recommended_elevation,
-    recommended_hr
-)
-VALUES (%s, %s, %s, %s)
-ON CONFLICT (activity_id)
-DO UPDATE SET
-    recommended_distance = EXCLUDED.recommended_distance,
-    recommended_elevation = EXCLUDED.recommended_elevation,
-    recommended_hr = EXCLUDED.recommended_hr;
-"""
-
-cursor.execute(
-    query4,
-    (
-        latest["activity_id"],
-        float(Recommended_Dist),
-        float(Recommended_Ele),
-        float(Recommended_HR)
+    query4 = """
+    INSERT INTO recommendations (
+        activity_id,
+        recommended_distance,
+        recommended_elevation,
+        recommended_hr
     )
-)
+    VALUES (%s, %s, %s, %s)
+    ON CONFLICT (activity_id)
+    DO UPDATE SET
+        recommended_distance = EXCLUDED.recommended_distance,
+        recommended_elevation = EXCLUDED.recommended_elevation,
+        recommended_hr = EXCLUDED.recommended_hr;
+    """
 
-conn.commit()
+    cursor.execute(
+        query4,
+        (
+            latest["activity_id"],
+            float(Recommended_Dist),
+            float(Recommended_Ele),
+            float(Recommended_HR)
+        )
+    )
 
-cursor.close()
-cursor = None
-conn.close()
-
-print("Recommendation saved successfully....")
+    conn.commit()
+    cursor.close()
+    print("Recommendation saved successfully....")
+except Exception as e:
+    print(f"Database recommendation save failed: {e}")
+    if 'conn' in locals() and conn:
+        conn.rollback()
+finally:
+    if 'conn' in locals() and conn:
+        conn.close()

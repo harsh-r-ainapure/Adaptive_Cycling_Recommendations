@@ -9,17 +9,27 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import cross_val_predict
 import os
 import sys
-from fitparse import FitFile
 from dotenv import load_dotenv
 import psycopg2
 
 load_dotenv()
 
-conn = psycopg2.connect(
-    os.getenv("SUPABASE_DB_URL")
-)
+db_url = os.getenv("SUPABASE_DB_URL")
+if not db_url:
+    print("Error: SUPABASE_DB_URL environment variable is not set.")
+    sys.exit(1)
 
-user_id = sys.argv[1]
+try:
+    conn = psycopg2.connect(db_url)
+except Exception as e:
+    print(f"Database connection failed: {e}")
+    sys.exit(1)
+
+user_id = sys.argv[1] if len(sys.argv) > 1 else None
+if not user_id:
+    print("Error: User ID argument missing for capacities.py.")
+    conn.close()
+    sys.exit(1)
 
 query1 = """
 SELECT *
@@ -28,7 +38,17 @@ WHERE user_id = %s
 ORDER BY activity_date
 """
 
-df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
+try:
+    df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query activities: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_activity.empty:
+    print("No activity records found for this user. Skipping capacities analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_activity = df_activity.rename(columns={
     "id": "Activity UUID",
@@ -55,7 +75,17 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
+try:
+    df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query activity features: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_features.empty:
+    print("No feature records found for this user. Skipping capacities analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_features = df_features.rename(columns={
     "gradient": "Gradient",
@@ -83,7 +113,17 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_predictions = pd.read_sql_query(query3, conn, params=(user_id,))  # type: ignore
+try:
+    df_predictions = pd.read_sql_query(query3, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query predictions: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_predictions.empty:
+    print("No prediction records found for this user. Skipping capacities analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_predictions = df_predictions.rename(columns={
     "estimated_power": "Estimated Power",
@@ -113,6 +153,11 @@ df = (
     )
 )
 
+if df.empty:
+    print("Merged dataset is empty. Nothing to process for capacities.")
+    conn.close()
+    sys.exit(0)
+
 df["Activity Date"] = pd.to_datetime(
     df["Activity Date"]
 )
@@ -136,24 +181,38 @@ def baseline_capp(df):
             rides["Activity Date"] >= cut_off_date
         ]
         
-        min_fatigue_rides = rides.nsmallest(3, "Fatigue")
-        max_power_rides = rides.nlargest(3, "Average Watts")
+        if rides.empty:
+            baseline_pow_list.append(df.loc[i, "Average Watts"])
+            baseline_dist_list.append(df.loc[i, "Distance"])
+            baseline_ele_list.append(df.loc[i, "Elevation Gain"])
+            baseline_HR_list.append(df.loc[i, "Average Heart Rate"])
+            continue
+
+        n_val = min(3, len(rides))
+        min_fatigue_rides = rides.nsmallest(n_val, "Fatigue")
+        max_power_rides = rides.nlargest(n_val, "Average Watts")
         has_overlap = min_fatigue_rides.index.isin(max_power_rides.index).any()
+        
         if has_overlap:
             overlap += 1
             common_rides = min_fatigue_rides[
                 min_fatigue_rides.index.isin(max_power_rides.index)
             ]
+            if common_rides.empty:
+                common_rides = min_fatigue_rides
             baseline_pow_list.append(common_rides["Average Watts"].mean())
             baseline_dist_list.append(common_rides["Distance"].mean())
             baseline_ele_list.append(common_rides["Elevation Gain"].mean())
             baseline_HR_list.append(common_rides["Average Heart Rate"].median())
         else:
             baseline = min_fatigue_rides.nlargest(1, "Average Watts")
+            if baseline.empty:
+                baseline = rides.iloc[[-1]]
             baseline_pow_list.append(baseline.iloc[0]["Average Watts"])
             baseline_dist_list.append(baseline.iloc[0]["Distance"])
             baseline_ele_list.append(baseline.iloc[0]["Elevation Gain"])
             baseline_HR_list.append(baseline.iloc[0]["Average Heart Rate"])
+            
     return baseline_pow_list, baseline_dist_list, baseline_ele_list, baseline_HR_list, overlap
 
 baseline_pow_list, baseline_dist_list, baseline_ele_list, baseline_HR_list, overlap = baseline_capp(df)
@@ -175,37 +234,42 @@ df["Capacity_Deviation"] = (
     - df["Baseline_Pow"]
 )
 
-cursor = conn.cursor()
+try:
+    cursor = conn.cursor()
 
-query4 = """
-UPDATE predictions
-SET
-    baseline_power = %s,
-    baseline_hr = %s,
-    baseline_distance = %s,
-    baseline_elevation = %s,
-    current_capacity = %s,
-    capacity_deviation = %s
-WHERE activity_id = %s;
-"""
+    query4 = """
+    UPDATE predictions
+    SET
+        baseline_power = %s,
+        baseline_hr = %s,
+        baseline_distance = %s,
+        baseline_elevation = %s,
+        current_capacity = %s,
+        capacity_deviation = %s
+    WHERE activity_id = %s;
+    """
 
-for _, row in df.iterrows():
-
-    cursor.execute(
-        query4,
-        (
-            float(row["Baseline_Pow"]),
-            float(row["Baseline_HR"]),
-            float(row["Baseline_Dist"]),
-            float(row["Baseline_Ele"]),
-            float(row["Current_Capacity"]),
-            float(row["Capacity_Deviation"]),
-            row["Activity UUID"]
+    for _, row in df.iterrows():
+        cursor.execute(
+            query4,
+            (
+                float(row["Baseline_Pow"]),
+                float(row["Baseline_HR"]),
+                float(row["Baseline_Dist"]),
+                float(row["Baseline_Ele"]),
+                float(row["Current_Capacity"]),
+                float(row["Capacity_Deviation"]),
+                row["Activity UUID"]
+            )
         )
-    )
 
-conn.commit()
-cursor.close()
-conn.close()
-
-print(f"Updated {len(df)} prediction rows.")
+    conn.commit()
+    cursor.close()
+    print(f"Updated {len(df)} prediction rows.")
+except Exception as e:
+    print(f"Database update failed: {e}")
+    if 'conn' in locals() and conn:
+        conn.rollback()
+finally:
+    if 'conn' in locals() and conn:
+        conn.close()

@@ -1,25 +1,28 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error
-import xgboost as xg
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import cross_val_predict
 import os
 import sys
-from fitparse import FitFile
 from dotenv import load_dotenv
 import psycopg2
 
 load_dotenv()
 
-conn = psycopg2.connect(
-    os.getenv("SUPABASE_DB_URL")
-)
+db_url = os.getenv("SUPABASE_DB_URL")
+if not db_url:
+    print("Error: SUPABASE_DB_URL environment variable is not set.")
+    sys.exit(1)
 
-user_id = sys.argv[1]
+try:
+    conn = psycopg2.connect(db_url)
+except Exception as e:
+    print(f"Database connection failed: {e}")
+    sys.exit(1)
+
+user_id = sys.argv[1] if len(sys.argv) > 1 else None
+if not user_id:
+    print("Error: User ID argument missing for severity.py.")
+    conn.close()
+    sys.exit(1)
 
 query1 = """
 SELECT *
@@ -28,7 +31,17 @@ WHERE user_id = %s
 ORDER BY activity_date
 """
 
-df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
+try:
+    df_activity = pd.read_sql_query(query1, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query activities: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_activity.empty:
+    print("No activity records found for this user. Skipping severity analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_activity = df_activity.rename(columns={
     "id": "Activity UUID",
@@ -55,7 +68,17 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
+try:
+    df_features = pd.read_sql_query(query2, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query activity features: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_features.empty:
+    print("No feature records found for this user. Skipping severity analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_features = df_features.rename(columns={
     "gradient": "Gradient",
@@ -83,7 +106,17 @@ WHERE a.user_id = %s
 ORDER BY a.activity_date;
 """
 
-df_predictions = pd.read_sql_query(query3, conn, params=(user_id,))  # type: ignore
+try:
+    df_predictions = pd.read_sql_query(query3, conn, params=(user_id,))  # type: ignore
+except Exception as e:
+    print(f"Failed to query predictions: {e}")
+    conn.close()
+    sys.exit(0)
+
+if df_predictions.empty:
+    print("No prediction records found for this user. Skipping severity analysis.")
+    conn.close()
+    sys.exit(0)
 
 df_predictions = df_predictions.rename(columns={
     "estimated_power": "Estimated Power",
@@ -113,7 +146,10 @@ df = (
     )
 )
 
-
+if df.empty:
+    print("Merged dataset is empty. Nothing to process for severity.")
+    conn.close()
+    sys.exit(0)
 
 df["Activity Date"] = pd.to_datetime(
     df["Activity Date"]
@@ -126,60 +162,69 @@ df = df.sort_values(
 def variation(df):
     variation_list = []
     for i in range(0, len(df)):
-      curr_date = df.loc[i, "Activity Date"]
-      cut_off_date = curr_date - pd.Timedelta(days=150)
-      rides = df.iloc[:i+1]
+        curr_date = df.loc[i, "Activity Date"]
+        cut_off_date = curr_date - pd.Timedelta(days=150)
+        rides = df.iloc[:i+1]
 
-      rides = rides[
-          rides["Activity Date"] >= cut_off_date
-      ]
+        rides = rides[
+            rides["Activity Date"] >= cut_off_date
+        ]
 
-      var = abs(
-          rides["Average Watts"]
-          - rides["Baseline_Pow"]
-      ).median()
+        if rides.empty or "Average Watts" not in rides.columns or "Baseline_Pow" not in rides.columns:
+            variation_list.append(1.0)
+            continue
 
-      variation_list.append(max(var, 1))
+        diffs = abs(rides["Average Watts"] - rides["Baseline_Pow"])
+        if diffs.dropna().empty:
+            var = 1.0
+        else:
+            var = diffs.median()
+            if pd.isna(var):
+                var = 1.0
+
+        variation_list.append(max(float(var), 1.0))
 
     return variation_list
 
 df["Variation"] = variation(df)
 
-df["Severity"] = (df["Capacity_Deviation"] / df["Variation"])
+# Safeguard against division by zero
+df["Variation"] = df["Variation"].replace(0, 1.0).fillna(1.0)
+df["Baseline_Pow"] = df["Baseline_Pow"].replace(0, 1e-6).fillna(1e-6)
 
-df["Percent_Change"] = (
-    df["Capacity_Deviation"]
-    / df["Baseline_Pow"]
-)
+df["Severity"] = df["Capacity_Deviation"] / df["Variation"]
+df["Percent_Change"] = df["Capacity_Deviation"] / df["Baseline_Pow"]
 
+try:
+    cursor = conn.cursor()
 
+    query4 = """
+    UPDATE predictions
+    SET
+        variation = %s,
+        severity = %s,
+        percent_change = %s
+    WHERE activity_id = %s;
+    """
 
-cursor = conn.cursor()
-
-query4 = """
-UPDATE predictions
-SET
-    variation = %s,
-    severity = %s,
-    percent_change = %s
-WHERE activity_id = %s;
-"""
-
-for _, row in df.iterrows():
-
-    cursor.execute(
-        query4,
-        (
-            float(row["Variation"]),
-            float(row["Severity"]),
-            float(row["Percent_Change"]),
-            row["Activity UUID"]
+    for _, row in df.iterrows():
+        cursor.execute(
+            query4,
+            (
+                float(row["Variation"]),
+                float(row["Severity"]),
+                float(row["Percent_Change"]),
+                row["Activity UUID"]
+            )
         )
-    )
 
-conn.commit()
-
-cursor.close()
-conn.close()
-
-print(f"Updated {len(df)} prediction rows.")
+    conn.commit()
+    cursor.close()
+    print(f"Updated {len(df)} prediction rows.")
+except Exception as e:
+    print(f"Database update failed: {e}")
+    if 'conn' in locals() and conn:
+        conn.rollback()
+finally:
+    if 'conn' in locals() and conn:
+        conn.close()

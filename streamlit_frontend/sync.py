@@ -49,15 +49,14 @@ def show_sync_page():
     stat_c1, stat_c2 = st.columns([5, 2])
     with stat_c1:
         if is_connected:
-            masked = f"{jwt[:8]}...{jwt[-6:]}" if len(jwt) > 16 else "VALID_SESSION"
-            st.markdown(f"""
+            st.markdown("""
             <div style="background: #0B0E15; border: 1px solid #161D2B; border-left: 3px solid #10B981; border-radius: 6px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #10B981;">
                         STATUS: AUTHENTICATED // GARMIN CONNECT
                     </div>
                     <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #64748B; margin-top: 2px;">
-                        TOKEN: {masked}
+                        SESSION: SECURE // HEALTH API CONNECTION ACTIVE
                     </div>
                 </div>
                 <span class="tech-tag live">ACTIVE</span>

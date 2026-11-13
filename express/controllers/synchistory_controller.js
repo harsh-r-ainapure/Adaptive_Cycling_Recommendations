@@ -7,16 +7,23 @@ import pool from "../config/db.js";
 
 export const upload = multer({ dest: "uploads/temp_zips/" });
 
-async function runPythonScript(scriptName, args) {
+async function runPythonScript(scriptName, args, batchInfo = "") {
     return new Promise((resolve, reject) => {
+        const prefix = batchInfo ? `[${batchInfo}] [${scriptName}]` : `[${scriptName}]`;
+        console.log(`${prefix} Starting execution...`);
+
         const py = spawn("python", [path.join("python", scriptName), ...args]);
         
-        py.stdout.on("data", (data) => console.log(`[${scriptName}] ${data}`));
-        py.stderr.on("data", (data) => console.error(`[${scriptName} ERR] ${data}`));
+        py.stdout.on("data", (data) => console.log(`${prefix} ${data.toString().trim()}`));
+        py.stderr.on("data", (data) => console.error(`${prefix} ERR: ${data.toString().trim()}`));
         
         py.on("close", (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`${scriptName} exited with code ${code}`));
+            if (code === 0) {
+                console.log(`${prefix} Completed successfully.`);
+                resolve();
+            } else {
+                reject(new Error(`${scriptName} exited with code ${code}`));
+            }
         });
     });
 }
@@ -47,10 +54,9 @@ export const handleHistoricalZipUpload = async (req, res) => {
 
         const zipPath = req.file.path;
         const extractDir = path.join("uploads", "extracted", userId);
-        const fitFilesDir = path.join(extractDir, "fit_files");
 
-        // 1. Unzip archive and unpack any nested zips
-        fs.mkdirSync(fitFilesDir, { recursive: true });
+        // 1. Unzip archive and unpack nested zips
+        console.log(`[Setup] Extracting ZIP package for user: ${userId}`);
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(extractDir, true);
 
@@ -68,14 +74,14 @@ export const handleHistoricalZipUpload = async (req, res) => {
                         fs.rmSync(filePath, { force: true });
                         extractNestedZips(subDir);
                     } catch (e) {
-                        console.error(`Skipping invalid nested zip: ${filePath}`);
+                        console.error(`[Setup] Skipping invalid nested zip: ${filePath}`);
                     }
                 }
             });
         };
         extractNestedZips(extractDir);
 
-        // 2. Find summarizedActivities.json for 100% precise activity type filtering
+        // 2. Parse summarizedActivities.json for 100% precise cycling filtering
         let validCyclingActivityIds = new Set();
         
         const findAndParseSummaries = (dir) => {
@@ -87,13 +93,10 @@ export const handleHistoricalZipUpload = async (req, res) => {
                     try {
                         const rawData = fs.readFileSync(filePath, "utf8");
                         const activities = JSON.parse(rawData);
-                        
-                        // Handle array or object wrapper depending on Garmin export format
                         const list = Array.isArray(activities) ? activities : (activities.summarizedActivities || []);
                         
                         list.forEach(act => {
                             const type = (act.activityType || act.activityTypeId || "").toString().toLowerCase();
-                            // Target cycling types specifically
                             if (type.includes("cycling") || type.includes("ride") || type.includes("biking") || type === "2" || type === "3") {
                                 if (act.activityId) {
                                     validCyclingActivityIds.add(act.activityId.toString());
@@ -101,14 +104,14 @@ export const handleHistoricalZipUpload = async (req, res) => {
                             }
                         });
                     } catch (err) {
-                        console.error("Error parsing summarized activities JSON:", err);
+                        console.error("[Filter] Error parsing summarized activities JSON:", err);
                     }
                 }
             });
         };
         findAndParseSummaries(extractDir);
 
-        // 3. Walk directory to collect all .fit files
+        // 3. Collect all .fit files and filter for cycling
         const walkSync = (dir, fileList = []) => {
             fs.readdirSync(dir).forEach(file => {
                 const filePath = path.join(dir, file);
@@ -122,49 +125,70 @@ export const handleHistoricalZipUpload = async (req, res) => {
         };
 
         const foundFitFiles = walkSync(extractDir);
-        let copiedCount = 0;
-
-        for (const fitFile of foundFitFiles) {
+        const cyclingFitFiles = foundFitFiles.filter(fitFile => {
             const fileName = path.basename(fitFile);
-            
-            // If we successfully found summary IDs, filter with 100% precision
             if (validCyclingActivityIds.size > 0) {
-                const matches = Array.from(validCyclingActivityIds).some(id => fileName.includes(id));
-                if (matches) {
-                    fs.copyFileSync(fitFile, path.join(fitFilesDir, fileName));
-                    copiedCount++;
-                }
-            } else {
-                // Fallback: if summary json wasn't found for some reason, copy all
-                fs.copyFileSync(fitFile, path.join(fitFilesDir, fileName));
-                copiedCount++;
+                return Array.from(validCyclingActivityIds).some(id => fileName.includes(id));
             }
-        }
-
-        console.log(`100% Precision Filter: Copied ${copiedCount} cycling FIT files out of ${foundFitFiles.length} total files.`);
-
-        // 4. Respond instantly with HTTP 202 to prevent Render timeout
-        res.status(202).json({ 
-            message: `Filtered ${copiedCount} cycling activities. Baseline initialization started in background.` 
+            return true;
         });
 
-        // 5. Run ML pipeline asynchronously
+        console.log(`[Filter] Filtered down to ${cyclingFitFiles.length} cycling files out of ${foundFitFiles.length} total files.`);
+
+        // 4. Respond instantly with HTTP 202
+        res.status(202).json({ 
+            message: `Filtered ${cyclingFitFiles.length} cycling activities. Micro-batch processing started in background.` 
+        });
+
+        // 5. Run ML pipeline asynchronously with detailed micro-batch logs
         setImmediate(async () => {
+            const BATCH_SIZE = 100;
+            const batches = [];
+            for (let i = 0; i < cyclingFitFiles.length; i += BATCH_SIZE) {
+                batches.push(cyclingFitFiles.slice(i, i + BATCH_SIZE));
+            }
+
             try {
-                await runPythonScript("preprocess.py", [userId]);
-                await runPythonScript("features.py", [fitFilesDir, userId]);
-                await runPythonScript("fatigue.py", [userId]);
-                await runPythonScript("capacities.py", [userId]);
-                await runPythonScript("severity.py", [userId]);
-                console.log("Background ML pipeline completed successfully for user:", userId);
+                console.log(`[Pipeline] Initializing database baseline...`);
+                await runPythonScript("preprocess.py", [userId], "Global-Setup");
+
+                for (let idx = 0; idx < batches.length; idx++) {
+                    const batch = batches[idx];
+                    const batchNum = idx + 1;
+                    const totalBatches = batches.length;
+                    const batchLabel = `Batch ${batchNum}/${totalBatches}`;
+                    
+                    const batchDir = path.join(extractDir, `batch_${idx}`);
+                    fs.mkdirSync(batchDir, { recursive: true });
+
+                    for (const fitFile of batch) {
+                        fs.copyFileSync(fitFile, path.join(batchDir, path.basename(fitFile)));
+                    }
+
+                    console.log(`[${batchLabel}] Processing ${batch.length} files with features.py...`);
+                    await runPythonScript("features.py", [batchDir, userId], batchLabel);
+
+                    // Clean up batch folder to free memory immediately
+                    fs.rmSync(batchDir, { recursive: true, force: true });
+                    console.log(`[${batchLabel}] Cleaned up batch directory from RAM/disk.`);
+                }
+
+                console.log(`[Pipeline] Running global post-processing models...`);
+                await runPythonScript("fatigue.py", [userId], "Global-Finalize");
+                await runPythonScript("capacities.py", [userId], "Global-Finalize");
+                await runPythonScript("severity.py", [userId], "Global-Finalize");
+                
+                console.log(`[Pipeline] SUCCESS: Historical import & ML pipeline fully completed for user: ${userId}`);
+
             } catch (pyErr) {
-                console.error("Background ML pipeline failed:", pyErr);
+                console.error("[Pipeline] ERROR: Micro-batch processing failed:", pyErr);
             } finally {
                 try {
                     fs.rmSync(zipPath, { force: true });
                     fs.rmSync(extractDir, { recursive: true, force: true });
+                    console.log(`[Cleanup] Temporary extraction directories removed.`);
                 } catch (cleanupErr) {
-                    console.error("Cleanup error:", cleanupErr.message);
+                    console.error("[Cleanup] Error clearing temporary files:", cleanupErr.message);
                 }
             }
         });

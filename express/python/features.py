@@ -8,6 +8,10 @@ import psycopg2
 
 load_dotenv()
 
+# TESTING FLAG: True = keep rides even with no power data. Set to False to restore the original behaviour
+# (only rides with >10% power samples are processed).
+ALLOW_NO_POWER = True
+
 temp_folder = sys.argv[1]
 user_id = sys.argv[2]
 
@@ -168,7 +172,10 @@ print(
     ).tail(100)
 )
 
-valid_id = power_check[power_check["Power_Availability_Percent"]>10]["Activity ID"]
+if ALLOW_NO_POWER:
+    valid_id = power_check["Activity ID"]
+else:
+    valid_id = power_check[power_check["Power_Availability_Percent"]>10]["Activity ID"]
 df  = df[df["Activity ID"].isin(valid_id)]
 df_fit = df_fit[df_fit["Activity ID"].isin(valid_id)]
 
@@ -474,21 +481,25 @@ rolling_features["Rolling_Percent"] = (
 
 rolling_blocks = df_fit[rolling_mask].copy()
 
-hr_recovery_slope = (
-    rolling_blocks
-    .groupby("Activity ID")[["heart_rate"]]
-    .apply(
-        lambda x:
-        (
-            x["heart_rate"].iloc[-1]
-            -
-            x["heart_rate"].iloc[0]
+if rolling_blocks.empty:
+    # no coasting samples (e.g. no cadence data) -> nothing to compute
+    hr_recovery_slope = pd.DataFrame(columns=["Activity ID", "HR_Recovery_Slope"])
+else:
+    hr_recovery_slope = (
+        rolling_blocks
+        .groupby("Activity ID")[["heart_rate"]]
+        .apply(
+            lambda x:
+            (
+                x["heart_rate"].iloc[-1]
+                -
+                x["heart_rate"].iloc[0]
+            )
+            /
+            (len(x) + 1e-6)
         )
-        /
-        (len(x) + 1e-6)
+        .reset_index(name="HR_Recovery_Slope")
     )
-    .reset_index(name="HR_Recovery_Slope")
-)
 # Merge slope
 rolling_features = rolling_features.merge(
     hr_recovery_slope,

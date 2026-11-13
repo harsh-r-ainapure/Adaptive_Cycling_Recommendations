@@ -13,10 +13,16 @@ async function runPythonScript(scriptName, args, batchInfo = "") {
         console.log(`${prefix} Starting execution...`);
 
         const py = spawn("python", [path.join("python", scriptName), ...args]);
-        
+
         py.stdout.on("data", (data) => console.log(`${prefix} ${data.toString().trim()}`));
-        py.stderr.on("data", (data) => console.error(`${prefix} ERR: ${data.toString().trim()}`));
-        
+        py.stderr.on("data", (data) => {
+            const msg = data.toString().trim();
+            // pandas/SQLAlchemy UserWarnings are harmless; don't label them as errors
+            const label = /Warning/.test(msg) && !/Traceback/.test(msg) ? "WARN" : "ERR";
+            console.error(`${prefix} ${label}: ${msg}`);
+        });
+
+        py.on("error", (err) => reject(err));
         py.on("close", (code) => {
             if (code === 0) {
                 console.log(`${prefix} Completed successfully.`);
@@ -30,8 +36,9 @@ async function runPythonScript(scriptName, args, batchInfo = "") {
 
 export const handleHistoricalZipUpload = async (req, res) => {
     const userId = req.body.userId || req.user?.id;
-    
+
     if (!userId) {
+        if (req.file) fs.rmSync(req.file.path, { force: true });
         return res.status(400).json({ error: "User ID missing." });
     }
 
@@ -40,11 +47,11 @@ export const handleHistoricalZipUpload = async (req, res) => {
             "SELECT COUNT(*) FROM activities WHERE user_id = $1",
             [userId]
         );
-        
+
         if (parseInt(checkResult.rows[0].count, 10) > 0) {
             if (req.file) fs.rmSync(req.file.path, { force: true });
-            return res.status(403).json({ 
-                error: "Historical data already exists. Future rides sync automatically via Garmin webhooks." 
+            return res.status(403).json({
+                error: "Historical data already exists. Future rides sync automatically via Garmin webhooks."
             });
         }
 
@@ -55,7 +62,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
         const zipPath = req.file.path;
         const extractDir = path.join("uploads", "extracted", userId);
 
-        // 1. Unzip archive and delete main zip immediately to free disk space
+        // 1. Unzip archive (and any nested zips) and delete the main zip to free disk space
         console.log(`[Setup] Extracting ZIP package for user: ${userId}`);
         const zip = new AdmZip(zipPath);
         zip.extractAllTo(extractDir, true);
@@ -83,139 +90,96 @@ export const handleHistoricalZipUpload = async (req, res) => {
         };
         extractNestedZips(extractDir);
 
-        // 2. Parse summarizedActivities.json for 100% precise cycling filtering
-        let validCyclingActivityIds = new Set();
-        
-        const findAndParseSummaries = (dir) => {
-            fs.readdirSync(dir).forEach(file => {
-                const filePath = path.join(dir, file);
-                if (fs.statSync(filePath).isDirectory()) {
-                    findAndParseSummaries(filePath);
-                } else if (file.toLowerCase().includes("summarizedactivities.json")) {
-                    try {
-                        const rawData = fs.readFileSync(filePath, "utf8");
-                        const parsed = JSON.parse(rawData);
-                        
-                        // Handle Garmin's [{"summarizedActivitiesExport": [...]}] wrapper
-                        let list = [];
-                        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].summarizedActivitiesExport) {
-                            list = parsed[0].summarizedActivitiesExport;
-                        } else if (Array.isArray(parsed)) {
-                            list = parsed;
-                        } else if (parsed && parsed.summarizedActivitiesExport) {
-                            list = parsed.summarizedActivitiesExport;
-                        } else if (parsed && parsed.summarizedActivities) {
-                            list = parsed.summarizedActivities;
-                        }
-                        
-                        list.forEach(act => {
-                            if (!act || typeof act !== "object") return;
-                            const type = (act.activityType || act.activityTypeId || "").toString().toLowerCase();
-                            if (
-                                type.includes("cycling") || 
-                                type.includes("ride") || 
-                                type.includes("biking")
-                            ) {
-                                if (act.activityId !== undefined && act.activityId !== null) {
-                                    validCyclingActivityIds.add(act.activityId.toString().trim());
-                                }
-                            }
-                        });
-                    } catch (err) {
-                        console.error("[Filter] Error parsing summarized activities JSON:", err);
-                    }
-                }
-            });
-        };
-        findAndParseSummaries(extractDir);
-        console.log(`[Filter] Found ${validCyclingActivityIds.size} valid cycling activity IDs in JSON summary.`);
-
-        // 3. Collect all .fit files, filter by exact numeric ID, and DELETE non-cycling files immediately
-        const walkSync = (dir, fileList = []) => {
-            fs.readdirSync(dir).forEach(file => {
-                const filePath = path.join(dir, file);
-                if (fs.statSync(filePath).isDirectory()) {
-                    fileList = walkSync(filePath, fileList);
-                } else if (file.toLowerCase().endsWith(".fit")) {
-                    fileList.push(filePath);
-                }
-            });
-            return fileList;
-        };
-
-        const foundFitFiles = walkSync(extractDir);
-        const cyclingFitFiles = [];
-
-        for (const fitFile of foundFitFiles) {
-            const base = path.basename(fitFile, path.extname(fitFile)); // e.g., mrudulaainapure0@gmail.com_203139416105
-            const numericId = base.split("_").pop().split("-")[0].trim();
-
-            if (validCyclingActivityIds.has(numericId)) {
-                cyclingFitFiles.push(fitFile);
-            } else {
-                // Delete non-cycling FIT file immediately to free container RAM/disk
-                fs.rmSync(fitFile, { force: true });
-            }
-        }
-
-        console.log(`[Filter] Filtered down to ${cyclingFitFiles.length} cycling files out of ${foundFitFiles.length} total files.`);
-
-        // 4. Respond instantly with HTTP 202
-        res.status(202).json({ 
-            message: `Filtered ${cyclingFitFiles.length} cycling activities. Micro-batch processing started in background.` 
+        // 2. Respond immediately; cycling detection + ML pipeline run in the background
+        res.status(202).json({
+            message: "Upload received. Detecting cycling activities and processing in the background."
         });
 
-        // 5. Run ML pipeline asynchronously with detailed micro-batch logs
         setImmediate(async () => {
             const BATCH_SIZE = 50;
-            const batches = [];
-            for (let i = 0; i < cyclingFitFiles.length; i += BATCH_SIZE) {
-                batches.push(cyclingFitFiles.slice(i, i + BATCH_SIZE));
-            }
+            let pipelineOk = false;
 
             try {
+                // 3. Find cycling FIT files by CONTENT (sport + start time vs summarizedActivities.json).
+                //    Garmin FIT filenames are upload IDs, NOT activityIds, so filename matching can't work.
+                const matchFile = path.join(extractDir, "cycling_matches.json");
+                await runPythonScript("match_fit.py", [extractDir, matchFile], "Filter");
+
+                let matches = [];
+                try {
+                    matches = JSON.parse(fs.readFileSync(matchFile, "utf8"));
+                } catch (e) {
+                    throw new Error(`Could not read FIT match results: ${e.message}`);
+                }
+
+                console.log(`[Filter] Matched ${matches.length} cycling FIT files to summary rides.`);
+                if (matches.length === 0) {
+                    // Abort BEFORE touching the database so the user can re-upload (the 403 check stays clear).
+                    throw new Error("No cycling FIT files matched any ride in summarizedActivities.json. Nothing imported.");
+                }
+
+                // Free disk: delete every FIT that was not selected
+                const keep = new Set(matches.map(m => path.resolve(m.path)));
+                const deleteUnselectedFits = (dir) => {
+                    fs.readdirSync(dir).forEach(file => {
+                        const p = path.join(dir, file);
+                        if (fs.statSync(p).isDirectory()) {
+                            deleteUnselectedFits(p);
+                        } else if (file.toLowerCase().endsWith(".fit") && !keep.has(path.resolve(p))) {
+                            fs.rmSync(p, { force: true });
+                        }
+                    });
+                };
+                deleteUnselectedFits(extractDir);
+
+                // 4. Insert baseline activity rows from the summary JSON
                 console.log(`[Pipeline] Initializing database baseline...`);
                 await runPythonScript("preprocess.py", [extractDir, userId], "Global-Setup");
 
+                // 5. Micro-batch feature extraction.
+                //    Each FIT is renamed to <activityId>.fit. features.py uses the bare filename as
+                //    "Activity ID" and joins it to activities.intervals_activity_id, so it must be exactly the activityId.
+                const batches = [];
+                for (let i = 0; i < matches.length; i += BATCH_SIZE) {
+                    batches.push(matches.slice(i, i + BATCH_SIZE));
+                }
+
                 for (let idx = 0; idx < batches.length; idx++) {
                     const batch = batches[idx];
-                    const batchNum = idx + 1;
-                    const totalBatches = batches.length;
-                    const batchLabel = `Batch ${batchNum}/${totalBatches}`;
-                    
+                    const batchLabel = `Batch ${idx + 1}/${batches.length}`;
+
                     const batchDir = path.join(extractDir, `batch_${idx}`);
                     fs.mkdirSync(batchDir, { recursive: true });
 
-                    for (const fitFile of batch) {
-                        if (fs.existsSync(fitFile)) {
-                            // Move instead of copy to avoid duplicating files in memory/disk
-                            fs.renameSync(fitFile, path.join(batchDir, path.basename(fitFile)));
-                        }
+                    for (const m of batch) {
+                        if (!fs.existsSync(m.path)) continue;
+                        fs.renameSync(m.path, path.join(batchDir, `${m.activityId}.fit`));
                     }
 
                     console.log(`[${batchLabel}] Processing ${batch.length} files with features.py...`);
                     await runPythonScript("features.py", [batchDir, userId], batchLabel);
 
-                    // Clean up batch folder and generated CSVs immediately
                     fs.rmSync(batchDir, { recursive: true, force: true });
-                    console.log(`[${batchLabel}] Cleaned up batch directory from RAM/disk.`);
+                    console.log(`[${batchLabel}] Cleaned up batch directory.`);
                 }
 
+                // 6. Global models
                 console.log(`[Pipeline] Running global post-processing models...`);
                 await runPythonScript("fatigue.py", [userId], "Global-Finalize");
                 await runPythonScript("capacities.py", [userId], "Global-Finalize");
                 await runPythonScript("severity.py", [userId], "Global-Finalize");
                 await runPythonScript("recommendation.py", [userId], "Global-Finalize");
-                
-                console.log(`[Pipeline] SUCCESS: Historical import & ML pipeline fully completed for user: ${userId}`);
+
+                pipelineOk = true;
+                console.log(`[Pipeline] SUCCESS: Imported ${matches.length} cycling rides and ran ML pipeline for user: ${userId}`);
 
             } catch (pyErr) {
-                console.error("[Pipeline] ERROR: Micro-batch processing failed:", pyErr);
+                console.error("[Pipeline] ERROR:", pyErr.message || pyErr);
             } finally {
                 try {
                     fs.rmSync(zipPath, { force: true });
                     fs.rmSync(extractDir, { recursive: true, force: true });
-                    console.log(`[Cleanup] Temporary extraction directories removed.`);
+                    console.log(`[Cleanup] Temporary extraction directories removed.${pipelineOk ? "" : " (pipeline did NOT complete)"}`);
                 } catch (cleanupErr) {
                     console.error("[Cleanup] Error clearing temporary files:", cleanupErr.message);
                 }
@@ -224,6 +188,7 @@ export const handleHistoricalZipUpload = async (req, res) => {
 
     } catch (err) {
         console.error("Historical import failed:", err);
+        if (req.file) fs.rmSync(req.file.path, { force: true });
         if (!res.headersSent) {
             res.status(500).json({ error: "Failed to process historical data package." });
         }

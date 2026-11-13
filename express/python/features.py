@@ -10,7 +10,7 @@ load_dotenv()
 
 # TESTING FLAG: True = keep rides even with no power data. Set to False to restore the original behaviour
 # (only rides with >10% power samples are processed).
-ALLOW_NO_POWER = True
+ALLOW_NO_POWER = False
 
 temp_folder = sys.argv[1]
 user_id = sys.argv[2]

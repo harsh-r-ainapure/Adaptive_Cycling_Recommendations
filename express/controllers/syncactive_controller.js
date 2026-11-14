@@ -46,10 +46,15 @@ function dateOrNull(value) {
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-// Garmin activityType values are upper case, e.g. "CYCLING", "INDOOR_CYCLING", "ROAD_BIKING", "RUNNING"
+// Exact cycling values from Garmin Activity API 2.1, Appendix A. (A substring match on "BIK" would wrongly accept
+// BIKE_TO_RUN_TRANSITION etc.)
+const CYCLING_TYPES = new Set([
+    "CYCLING", "BMX", "CYCLOCROSS", "DOWNHILL_BIKING", "E_BIKE_FITNESS", "E_BIKE_MOUNTAIN",
+    "E_ENDURO_MTB", "ENDURO_MTB", "GRAVEL_CYCLING", "INDOOR_CYCLING", "MOUNTAIN_BIKING",
+    "RECUMBENT_CYCLING", "ROAD_BIKING", "TRACK_CYCLING", "VIRTUAL_RIDE", "HANDCYCLING", "INDOOR_HANDCYCLING"
+]);
 function isCycling(activityType) {
-    const t = String(activityType || "").toUpperCase();
-    return t.includes("CYCL") || t.includes("BIK") || t.includes("RIDE");
+    return CYCLING_TYPES.has(String(activityType || "").toUpperCase());
 }
 
 async function decompressIfGzipped(buffer) {
@@ -165,26 +170,26 @@ async function findUser(garminUserId) {
 }
 
 async function upsertActivity(user, activity, activityId) {
-    // Field names verified against Garmin docs/examples: distanceInMeters, durationInSeconds,
-    // averageHeartRateInBeatsPerMinute, maxHeartRateInBeatsPerMinute, startTimeInSeconds.
-    // The cadence / power / elevation names below are best guesses with fallbacks: check a real payload in your logs.
+    // Field names are the exact ones in Garmin Activity API 2.1, section 6.1 (Activity Summaries).
+    // The summary has NO power field and no separate moving/elapsed time: average_power stays null here
+    // (power only exists in the FIT file / Activity Details samples as powerInWatts).
     const activityDate = dateOrNull(
-        activity.startTimeInSeconds ? activity.startTimeInSeconds * 1000 : activity.startTimeLocal
+        activity.startTimeInSeconds ? activity.startTimeInSeconds * 1000 : null
     );
     const values = [
         user.id,
         String(activityId),
         activityDate,
         numberOrNull(activity.distanceInMeters),
-        numberOrNull(first(activity.movingDurationInSeconds, activity.durationInSeconds)),
-        numberOrNull(first(activity.elapsedDurationInSeconds, activity.durationInSeconds)),
+        numberOrNull(activity.durationInSeconds),   // moving_time (no moving-time field in the summary)
+        numberOrNull(activity.durationInSeconds),   // elapsed_time
         numberOrNull(activity.averageSpeedInMetersPerSecond),
-        numberOrNull(first(activity.averagePowerInWatts, activity.averageWatts)),
+        null,                                       // average_power: not in the summary
         numberOrNull(activity.averageHeartRateInBeatsPerMinute),
         numberOrNull(activity.maxHeartRateInBeatsPerMinute),
-        numberOrNull(first(activity.averageBikeCadenceInRoundsPerMinute, activity.averageCadenceInRpm)),
-        numberOrNull(first(activity.totalElevationGainInMeters, activity.elevationGainInMeters)),
-        numberOrNull(first(activity.totalElevationLossInMeters, activity.elevationLossInMeters)),
+        numberOrNull(activity.averageBikeCadenceInRoundsPerMinute),
+        numberOrNull(activity.totalElevationGainInMeters),
+        numberOrNull(activity.totalElevationLossInMeters),
         JSON.stringify(activity)
     ];
 
@@ -257,6 +262,11 @@ async function processFile(file) {
         return;
     }
     if (file.fileType && String(file.fileType).toUpperCase() !== "FIT") return;
+    // activityFiles items carry activityType, so non-cycling files are dropped without touching the download quota.
+    if (!isCycling(file.activityType)) {
+        console.log(`[Garmin] Skipping ${file.activityType} file for activity ${activityId} (not cycling).`);
+        return;
+    }
 
     const user = await findUser(file.userId);
     if (!user) return;
@@ -278,6 +288,13 @@ async function processFile(file) {
         );
         await runMlPipeline(tempFolder, user.id);
         console.log(`[Garmin] Pipeline finished for activity ${activityId}`);
+    } catch (err) {
+        // Garmin: callbackURL is valid for 24h and can be downloaded ONCE; a repeat download returns HTTP 410.
+        if (err.response?.status === 410) {
+            console.warn(`[Garmin] FIT for activity ${activityId} was already downloaded (410). Skipped.`);
+            return;
+        }
+        throw err;
     } finally {
         await fs.rm(tempFolder, { recursive: true, force: true }).catch((e) =>
             console.error("Cleanup error:", e.message)

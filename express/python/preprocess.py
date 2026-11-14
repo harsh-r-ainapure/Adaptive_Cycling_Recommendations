@@ -118,37 +118,38 @@ process_summaries(temp_folder)
 conn.commit()
 
 # --- POWER METER DATE FILTERING ---
+
 try:
     cursor.execute(
-        "SELECT has_power_meter, power_meter_install_date, power_meter_month, power_meter_year FROM users WHERE id = %s",
+        "SELECT has_power_meter, power_meter_month, power_meter_year FROM users WHERE id = %s",
         (user_id,)
     )
     user_row = cursor.fetchone()
+    print(f"[preprocess.py] Debug user_row for power meter: {user_row}")
+    
     if user_row:
-        has_power_meter, install_date, pm_month, pm_year = user_row
+        has_power_meter, pm_month, pm_year = user_row
         cutoff_datetime = None
-        if str(has_power_meter).lower() in ["true", "yes", "1"]:
-            if install_date:
-                cutoff_datetime = pd.to_datetime(install_date)
-            elif pm_month and pm_year:
-                try:
-                    if isinstance(pm_month, str):
-                        month_num = datetime.strptime(pm_month[:3], "%b").month
-                    else:
-                        month_num = int(pm_month)
-                    cutoff_datetime = pd.Timestamp(year=int(pm_year), month=month_num, day=1)
-                except Exception as e:
-                    print(f"[preprocess.py] Could not parse power meter month/year: {e}")
+        
+        # Handle boolean or string representations of TRUE
+        is_true = has_power_meter is True or str(has_power_meter).lower() in ["true", "yes", "1", "t"]
+        
+        if is_true and pm_month and pm_year:
+            month_num = int(pm_month)
+            year_num = int(pm_year)
+            cutoff_datetime = pd.Timestamp(year=year_num, month=month_num, day=1, tz="UTC")
+            print(f"[preprocess.py] Calculated power meter cutoff date: {cutoff_datetime}")
 
         if cutoff_datetime is not None:
-            print(f"[preprocess.py] Filtering out activities prior to power meter installation date: {cutoff_datetime.strftime('%Y-%m-%d')}")
             delete_query = "DELETE FROM activities WHERE user_id = %s AND activity_date < %s;"
             cursor.execute(delete_query, (user_id, cutoff_datetime))
             deleted_count = cursor.rowcount
             conn.commit()
-            print(f"[preprocess.py] Discarded {deleted_count} pre-power-meter activities.")
+            print(f"[preprocess.py] Discarded {deleted_count} pre-power-meter activities prior to {cutoff_datetime}.")
+        else:
+            print("[preprocess.py] Power meter cutoff date could not be established or feature disabled.")
 except Exception as e:
-    print(f"[preprocess.py] Power meter calibration check skipped or failed: {e}")
+    print(f"[preprocess.py] ERROR in power meter calibration check: {e}")
 
 cursor.close()
 conn.close()

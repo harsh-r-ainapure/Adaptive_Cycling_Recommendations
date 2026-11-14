@@ -120,7 +120,7 @@ conn.commit()
 # --- POWER METER DATE FILTERING ---
 try:
     cursor.execute(
-        "SELECT power_meter, power_meter_install_date, power_meter_month, power_meter_year FROM users WHERE id = %s",
+        "SELECT has_power_meter, power_meter_install_date, power_meter_month, power_meter_year FROM users WHERE id = %s",
         (user_id,)
     )
     user_row = cursor.fetchone()

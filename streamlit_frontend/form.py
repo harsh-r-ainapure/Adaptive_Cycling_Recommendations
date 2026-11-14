@@ -1,10 +1,25 @@
 import datetime
+import hmac
+import hashlib
+import base64
+import json
 from pathlib import Path
 import streamlit as st
 import requests
-import jwt as pyjwt
 
 BACKEND = "https://adaptive-cycling-recommendations.onrender.com"
+
+
+def make_jwt_token(payload, secret):
+    """Generates a standard HS256 JWT using only standard library modules."""
+    def b64url(data_bytes):
+        return base64.urlsafe_b64encode(data_bytes).decode('utf-8').rstrip('=')
+
+    header_b64 = b64url(json.dumps({'alg': 'HS256', 'typ': 'JWT'}, separators=(',', ':')).encode('utf-8'))
+    payload_b64 = b64url(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
+    signing_input = f"{header_b64}.{payload_b64}".encode('utf-8')
+    sig_b64 = b64url(hmac.new(secret.encode('utf-8'), signing_input, hashlib.sha256).digest())
+    return f"{header_b64}.{payload_b64}.{sig_b64}"
 
 
 def get_effective_jwt():
@@ -46,7 +61,7 @@ def get_effective_jwt():
         except Exception:
             pass
 
-        return pyjwt.encode({"id": uid}, secret, algorithm="HS256")
+        return make_jwt_token({"id": uid}, secret)
     except Exception:
         return None
 

@@ -29,7 +29,7 @@ def show_form_page():
     with form_col:
         default_name = st.session_state.get("user_name", "")
 
-        with st.form("setup_form", border=True):
+        with st.container(border=True):
             st.markdown("""
             <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #F8FAFC; text-transform: uppercase; margin-bottom: 12px; font-weight: 600;">
                 Profile Parameters
@@ -114,7 +114,7 @@ def show_form_page():
 
             st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
-            submitted = st.form_submit_button(
+            submitted = st.button(
                 "Commit Calibration Profile",
                 type="primary",
                 use_container_width=True
@@ -171,8 +171,7 @@ def show_form_page():
             else:
                 st.success("Calibration profile committed successfully. Sensor baseline calibrated.")
 
-            st.session_state["selected_page"] = "Sync"
-            st.rerun()
+            st.toast("Calibration profile saved.")
 
     with info_col:
         st.markdown("""
@@ -185,7 +184,7 @@ def show_form_page():
             </p>
             <div style="border-top: 1px solid #161D2B; padding-top: 12px;">
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #64748B;">
-                    SUBSEQUENT ACTION: Proceed to Sync to fetch historical rides and train the baseline model.
+                    STATUS: INDEPENDENT SENSOR CALIBRATION // SAVED TO ATHLETE PROFILE
                 </div>
             </div>
         </div>

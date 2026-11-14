@@ -118,6 +118,13 @@ NAV_LABELS = {
     "Contact": "Dispatch & Support"
 }
 
+# Check query parameters for authentication token (e.g. ?token=...)
+auth_token = st.query_params.get("token")
+if isinstance(auth_token, list):
+    auth_token = auth_token[0] if auth_token else None
+if auth_token:
+    st.session_state["jwt"] = auth_token
+
 # Check query parameters for direct page routing (e.g. ?page=privacy or ?p=privacy)
 route_param = st.query_params.get("page") or st.query_params.get("p")
 if isinstance(route_param, list):

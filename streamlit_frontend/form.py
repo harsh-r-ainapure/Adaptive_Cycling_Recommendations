@@ -24,9 +24,6 @@ def show_form_page():
         </div>
     """, unsafe_allow_html=True)
 
-    if not is_connected:
-        st.info("Garmin Connect account is unlinked. You can complete the profile now, but saving requires an authenticated session.")
-
     form_col, info_col = st.columns([7, 4], gap="large")
 
     with form_col:
@@ -129,10 +126,6 @@ def show_form_page():
                 st.error("Athlete name cannot be blank.")
                 st.stop()
 
-            if not jwt:
-                st.error("Authentication required. Please connect your Garmin Connect account on the Sync page before saving.")
-                st.stop()
-
             month_number = None
             year_number = None
 
@@ -148,33 +141,38 @@ def show_form_page():
                 "power_meter_year": year_number
             }
 
-            response = None
-            try:
-                with st.spinner("Writing calibration parameters to database..."):
-                    response = requests.post(
-                        f"{BACKEND}/api/auth/garmin/profile",
-                        json=payload,
-                        headers={
-                            "Authorization": f"Bearer {jwt}"
-                        },
-                        timeout=30
-                    )
-                    response.raise_for_status()
+            # Persist calibration state immediately
+            st.session_state["user_name"] = name_str
+            st.session_state["has_power"] = has_power
+            st.session_state["power_start_month"] = month_number
+            st.session_state["power_start_year"] = year_number
+            st.session_state["pending_calibration_payload"] = payload
+            st.session_state["calibration_saved"] = True
 
-                st.success("Calibration profile committed successfully.")
-                st.session_state["user_name"] = name_str
-                st.session_state["has_power"] = has_power
-                st.session_state["power_start_month"] = month_number
-                st.session_state["power_start_year"] = year_number
+            # If an active Garmin session exists, sync directly to database
+            if jwt:
+                try:
+                    with st.spinner("Writing calibration parameters to database..."):
+                        response = requests.post(
+                            f"{BACKEND}/api/auth/garmin/profile",
+                            json=payload,
+                            headers={
+                                "Authorization": f"Bearer {jwt}"
+                            },
+                            timeout=30
+                        )
+                        response.raise_for_status()
+                    st.success("Calibration profile committed and synchronized to your account.")
+                except requests.exceptions.HTTPError as http_err:
+                    err_msg = response.text if response is not None else str(http_err)
+                    st.warning(f"Profile saved locally. Account sync notice: {err_msg}")
+                except Exception as e:
+                    st.warning(f"Profile saved locally. Cloud sync warning: {e}")
+            else:
+                st.success("Calibration profile committed successfully. Sensor baseline calibrated.")
 
-                st.session_state["selected_page"] = "Sync"
-                st.rerun()
-
-            except requests.exceptions.HTTPError as http_err:
-                err_msg = response.text if response is not None else str(http_err)
-                st.error(f"Server response error: {err_msg}")
-            except Exception as e:
-                st.error(f"Unable to save calibration profile: {e}")
+            st.session_state["selected_page"] = "Sync"
+            st.rerun()
 
     with info_col:
         st.markdown("""

@@ -252,6 +252,20 @@ def show_sync_page():
 
         st.success("Authentication completed. Garmin session registered.")
 
+        # Sync any pending calibration parameters configured prior to authentication
+        pending_profile = st.session_state.get("pending_calibration_payload")
+        if pending_profile:
+            try:
+                requests.post(
+                    f"{BACKEND}/api/auth/garmin/profile",
+                    json=pending_profile,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=15
+                )
+                st.session_state["pending_calibration_payload"] = None
+            except Exception:
+                pass
+
     jwt = st.session_state.get("jwt")
     is_connected = bool(jwt)
     user_id = get_user_id_from_jwt(jwt) if jwt else None

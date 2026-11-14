@@ -181,7 +181,7 @@ const handleGarminWebhook = async (req, res) => {
                     moving_time     = EXCLUDED.moving_time,
                     elapsed_time    = EXCLUDED.elapsed_time,
                     average_speed   = EXCLUDED.average_speed,
-                    average_power   = EXCLUDED.average_power,
+                    average_power   = EXCLUDED.power,
                     average_hr      = EXCLUDED.average_hr,
                     max_hr          = EXCLUDED.max_hr,
                     average_cadence = EXCLUDED.average_cadence,
@@ -244,7 +244,106 @@ const handleGarminWebhook = async (req, res) => {
     }
 };
 
+// ============================================================
+// 3. MANUAL RECENT RIDES FETCH (POST /api/sync/recent)
+// ============================================================
+const syncRecentRides = async (req, res) => {
+    const userId = req.user.id; // From authenticate middleware
+
+    try {
+        // Fetch user's Garmin refresh token from database
+        const userQuery = await pool.query(
+            "SELECT refresh_token FROM users WHERE id = $1", 
+            [userId]
+        );
+        
+        if (userQuery.rows.length === 0 || !userQuery.rows[0].refresh_token) {
+            return res.status(400).json({ error: "Garmin account not linked or refresh token missing." });
+        }
+
+        const refreshToken = userQuery.rows[0].refresh_token;
+
+        // Exchange refresh token for a fresh access token from Garmin
+        const tokenResponse = await axios.post("https://connect.garmin.com/oauth-reference/oauth/token", null, {
+            params: {
+                grant_type: "refresh_token",
+                refresh_token: refreshToken,
+                client_id: process.env.GARMIN_CLIENT_ID,
+                client_secret: process.env.GARMIN_CLIENT_SECRET
+            }
+        });
+
+        const accessToken = tokenResponse.data.access_token;
+
+        // Fetch recent activities from Garmin API
+        const activitiesResponse = await axios.get("https://apis.garmin.com/wellness-api/rest/activities", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params: {
+                uploadStartTime: Math.floor((Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000)
+            }
+        });
+
+        const recentActivities = activitiesResponse.data || [];
+        let insertedCount = 0;
+
+        for (const act of recentActivities) {
+            const activityType = String(act.activityType || "").toLowerCase();
+            if (!["cycling", "ride", "biking", "virtual_ride"].some(t => activityType.includes(t))) {
+                continue;
+            }
+
+            const activityId = String(act.activityId);
+            const activityDate = dateOrNull(
+                act.startTimeInSeconds ? act.startTimeInSeconds * 1000 : act.startTimeLocal
+            );
+
+            // Insert into activities table (avoiding duplicates)
+            const result = await pool.query(
+                `
+                INSERT INTO activities
+                (
+                    user_id, intervals_activity_id, activity_date, distance,
+                    moving_time, elapsed_time, average_speed, average_power,
+                    average_hr, max_hr, average_cadence, elevation_gain, elevation_loss
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (user_id, intervals_activity_id) DO NOTHING
+                `,
+                [
+                    userId,
+                    activityId,
+                    activityDate,
+                    numberOrNull(act.distanceInMeters),
+                    numberOrNull(act.durationInSeconds),
+                    numberOrNull(act.elapsedDurationInSeconds),
+                    numberOrNull(act.averageSpeedInMetersPerSecond),
+                    numberOrNull(act.averageWatts),
+                    numberOrNull(act.averageHeartRateInBeatsPerMinute),
+                    numberOrNull(act.maxHeartRateInBeatsPerMinute),
+                    numberOrNull(act.averageCadenceInRpm),
+                    numberOrNull(act.elevationGainInMeters),
+                    numberOrNull(act.elevationLossInMeters)
+                ]
+            );
+
+            if (result.rowCount > 0) {
+                insertedCount++;
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Successfully synced recent rides. Added ${insertedCount} new activities.`
+        });
+
+    } catch (error) {
+        console.error("Error syncing recent Garmin rides:", error.response?.data || error.message);
+        return res.status(500).json({ error: "Failed to fetch recent rides from Garmin." });
+    }
+};
+
 export {
     verifyGarminWebhook,
-    handleGarminWebhook
+    handleGarminWebhook,
+    syncRecentRides
 };

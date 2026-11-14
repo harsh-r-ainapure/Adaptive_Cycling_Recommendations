@@ -8,6 +8,11 @@ import { promisify } from "util";
 
 const gunzipAsync = promisify(gunzip);
 
+const GARMIN_TOKEN_URL = "https://connectapi.garmin.com/di-oauth2-service/oauth/token";
+
+// ------------------------------------------------------------
+// helpers
+// ------------------------------------------------------------
 function runPython(scriptPath, ...args) {
     return new Promise((resolve, reject) => {
         const pythonCommand = process.platform === "win32" ? "py" : "python3";
@@ -27,6 +32,8 @@ function runPython(scriptPath, ...args) {
     });
 }
 
+const first = (...values) => values.find((v) => v !== undefined && v !== null);
+
 function numberOrNull(value) {
     if (value === undefined || value === null || value === "") return null;
     const number = Number(value);
@@ -39,6 +46,12 @@ function dateOrNull(value) {
     return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// Garmin activityType values are upper case, e.g. "CYCLING", "INDOOR_CYCLING", "ROAD_BIKING", "RUNNING"
+function isCycling(activityType) {
+    const t = String(activityType || "").toUpperCase();
+    return t.includes("CYCL") || t.includes("BIK") || t.includes("RIDE");
+}
+
 async function decompressIfGzipped(buffer) {
     const data = Buffer.from(buffer);
     const isGzip = data.length >= 2 && data[0] === 0x1f && data[1] === 0x8b;
@@ -46,36 +59,86 @@ async function decompressIfGzipped(buffer) {
     return await gunzipAsync(data);
 }
 
-// Download FIT file from Garmin Activity callback URL
-async function downloadGarminFitFile(fileUrl, accessToken, fitPath) {
-    const response = await axios.get(fileUrl, {
-        headers: {
-            Authorization: `Bearer ${accessToken}`
-        },
-        responseType: "arraybuffer",
-        timeout: 60000
+// One job at a time: keeps Render memory/CPU sane and avoids two pipelines touching the same user at once.
+let jobQueue = Promise.resolve();
+function enqueue(job) {
+    jobQueue = jobQueue.then(job).catch((err) => console.error("[Garmin] Job failed:", err.message));
+    return jobQueue;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ------------------------------------------------------------
+// OAuth 2.0: access tokens last ~24h, refresh tokens ~90 days
+// ------------------------------------------------------------
+async function refreshAccessToken(user) {
+    if (!user.refresh_token || !process.env.GARMIN_CLIENT_ID || !process.env.GARMIN_CLIENT_SECRET) {
+        throw new Error(
+            "Garmin rejected the access token (401) and it can't be refreshed: need users.refresh_token plus " +
+            "GARMIN_CLIENT_ID / GARMIN_CLIENT_SECRET env vars."
+        );
+    }
+
+    const body = new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: process.env.GARMIN_CLIENT_ID,
+        client_secret: process.env.GARMIN_CLIENT_SECRET,
+        refresh_token: user.refresh_token
     });
 
-    let fitBuffer = Buffer.from(response.data);
-    fitBuffer = await decompressIfGzipped(fitBuffer);
+    const { data } = await axios.post(GARMIN_TOKEN_URL, body.toString(), {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 30000
+    });
+
+    // Garmin returns a NEW refresh token every time; the old one must be replaced.
+    const newRefresh = data.refresh_token || user.refresh_token;
+    await pool.query(
+        `UPDATE users SET access_token = $1, refresh_token = $2 WHERE id = $3`,
+        [data.access_token, newRefresh, user.id]
+    );
+    user.access_token = data.access_token;
+    user.refresh_token = newRefresh;
+    console.log(`[Garmin] Refreshed access token for user ${user.id}`);
+    return data.access_token;
+}
+
+// ------------------------------------------------------------
+// FIT download (callbackURL comes from an "activityFiles" push item)
+// ------------------------------------------------------------
+async function downloadGarminFitFile(fileUrl, user, fitPath) {
+    const get = (token) =>
+        axios.get(fileUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: "arraybuffer",
+            timeout: 60000
+        });
+
+    let response;
+    try {
+        response = await get(user.access_token);
+    } catch (err) {
+        if (err.response?.status !== 401) throw err;
+        response = await get(await refreshAccessToken(user));
+    }
+
+    let fitBuffer = await decompressIfGzipped(Buffer.from(response.data));
 
     if (fitBuffer.length < 12) {
         throw new Error("Downloaded data is too small to be a FIT file");
     }
-
     const fitSignature = fitBuffer.subarray(8, 12).toString("ascii");
     if (fitSignature !== ".FIT") {
-        console.warn(`File does not contain expected FIT signature: ${fitSignature}`);
+        throw new Error(`Not a FIT file (signature: ${fitSignature})`);
     }
 
     await fs.writeFile(fitPath, fitBuffer);
-    return true;
 }
 
 async function runMlPipeline(tempFolder, userID) {
     const pythonDir = path.join(process.cwd(), "python");
-    console.log("Running preprocess.py...");
-    await runPython(path.join(pythonDir, "preprocess.py"), userID);
+    // NOTE: preprocess.py is NOT run here. It expects (folder, user_id) and reads summarizedActivities.json from a
+    // Garmin export; in the webhook flow the activities row is already written by upsertActivity().
     console.log("Running features.py...");
     await runPython(path.join(pythonDir, "features.py"), tempFolder, userID);
     console.log("Running fatigue.py...");
@@ -88,8 +151,153 @@ async function runMlPipeline(tempFolder, userID) {
     await runPython(path.join(pythonDir, "recommendation.py"), userID);
 }
 
+// ------------------------------------------------------------
+// DB
+// ------------------------------------------------------------
+async function findUser(garminUserId) {
+    // payload.userId is the Garmin API user id (GET /wellness-api/rest/user/id), NOT the Garmin Connect profile id.
+    const result = await pool.query(`SELECT * FROM users WHERE garmin_id = $1`, [String(garminUserId)]);
+    if (result.rows.length === 0) {
+        console.warn(`[Garmin] No user with garmin_id=${garminUserId}. Is users.garmin_id the Garmin API userId?`);
+        return null;
+    }
+    return result.rows[0];
+}
+
+async function upsertActivity(user, activity, activityId) {
+    // Field names verified against Garmin docs/examples: distanceInMeters, durationInSeconds,
+    // averageHeartRateInBeatsPerMinute, maxHeartRateInBeatsPerMinute, startTimeInSeconds.
+    // The cadence / power / elevation names below are best guesses with fallbacks: check a real payload in your logs.
+    const activityDate = dateOrNull(
+        activity.startTimeInSeconds ? activity.startTimeInSeconds * 1000 : activity.startTimeLocal
+    );
+    const values = [
+        user.id,
+        String(activityId),
+        activityDate,
+        numberOrNull(activity.distanceInMeters),
+        numberOrNull(first(activity.movingDurationInSeconds, activity.durationInSeconds)),
+        numberOrNull(first(activity.elapsedDurationInSeconds, activity.durationInSeconds)),
+        numberOrNull(activity.averageSpeedInMetersPerSecond),
+        numberOrNull(first(activity.averagePowerInWatts, activity.averageWatts)),
+        numberOrNull(activity.averageHeartRateInBeatsPerMinute),
+        numberOrNull(activity.maxHeartRateInBeatsPerMinute),
+        numberOrNull(first(activity.averageBikeCadenceInRoundsPerMinute, activity.averageCadenceInRpm)),
+        numberOrNull(first(activity.totalElevationGainInMeters, activity.elevationGainInMeters)),
+        numberOrNull(first(activity.totalElevationLossInMeters, activity.elevationLossInMeters)),
+        JSON.stringify(activity)
+    ];
+
+    // Requires a UNIQUE index on (user_id, intervals_activity_id), see the SQL in the chat reply.
+    await pool.query(
+        `
+        INSERT INTO activities
+        (
+            id, user_id, intervals_activity_id, activity_date, distance, moving_time, elapsed_time,
+            average_speed, average_power, average_hr, max_hr, average_cadence,
+            elevation_gain, elevation_loss, raw_data
+        )
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (user_id, intervals_activity_id)
+        DO UPDATE SET
+            activity_date   = EXCLUDED.activity_date,
+            distance        = EXCLUDED.distance,
+            moving_time     = EXCLUDED.moving_time,
+            elapsed_time    = EXCLUDED.elapsed_time,
+            average_speed   = EXCLUDED.average_speed,
+            average_power   = EXCLUDED.average_power,
+            average_hr      = EXCLUDED.average_hr,
+            max_hr          = EXCLUDED.max_hr,
+            average_cadence = EXCLUDED.average_cadence,
+            elevation_gain  = EXCLUDED.elevation_gain,
+            elevation_loss  = EXCLUDED.elevation_loss,
+            raw_data        = EXCLUDED.raw_data
+        `,
+        values
+    );
+}
+
+// The FIT push and the summary push can arrive in either order, so wait briefly for the summary row.
+async function waitForActivityRow(userID, activityId, attempts = 6, delayMs = 10000) {
+    for (let i = 0; i < attempts; i++) {
+        const r = await pool.query(
+            `SELECT id FROM activities WHERE user_id = $1 AND intervals_activity_id = $2`,
+            [userID, String(activityId)]
+        );
+        if (r.rows.length > 0) return r.rows[0];
+        if (i < attempts - 1) await sleep(delayMs);
+    }
+    return null;
+}
+
+// ------------------------------------------------------------
+// payload handling (runs AFTER we've already answered Garmin)
+// ------------------------------------------------------------
+async function processSummary(activity) {
+    const activityId = first(activity.activityId, activity.summaryId);
+    if (!activity.userId || activityId === undefined) {
+        console.warn("[Garmin] activities item without userId/activityId, skipped.");
+        return;
+    }
+    if (!isCycling(activity.activityType)) {
+        console.log(`[Garmin] Skipping ${activity.activityType} activity ${activityId} (not cycling).`);
+        return;
+    }
+    const user = await findUser(activity.userId);
+    if (!user) return;
+
+    await upsertActivity(user, activity, activityId);
+    console.log(`[Garmin] Saved cycling activity ${activityId} for user ${user.id}`);
+}
+
+async function processFile(file) {
+    const activityId = first(file.activityId, file.summaryId);
+    if (!file.userId || activityId === undefined || !file.callbackURL) {
+        console.warn("[Garmin] activityFiles item missing userId/activityId/callbackURL, skipped.", Object.keys(file));
+        return;
+    }
+    if (file.fileType && String(file.fileType).toUpperCase() !== "FIT") return;
+
+    const user = await findUser(file.userId);
+    if (!user) return;
+
+    // Only rides that were saved as cycling by processSummary() get a FIT run: this is also our cycling filter.
+    const row = await waitForActivityRow(user.id, activityId);
+    if (!row) {
+        console.warn(`[Garmin] FIT for ${activityId} arrived but no activities row exists (not cycling, or IDs differ). Skipped.`);
+        return;
+    }
+
+    const tempFolder = path.join(process.cwd(), "temp", String(user.id), String(activityId));
+    try {
+        await fs.mkdir(tempFolder, { recursive: true });
+        await downloadGarminFitFile(file.callbackURL, user, path.join(tempFolder, `${activityId}.fit`));
+        await pool.query(
+            `UPDATE activities SET fit_available = true WHERE user_id = $1 AND intervals_activity_id = $2`,
+            [user.id, String(activityId)]
+        );
+        await runMlPipeline(tempFolder, user.id);
+        console.log(`[Garmin] Pipeline finished for activity ${activityId}`);
+    } finally {
+        await fs.rm(tempFolder, { recursive: true, force: true }).catch((e) =>
+            console.error("Cleanup error:", e.message)
+        );
+    }
+}
+
+async function processPayload(body) {
+    for (const activity of body.activities || []) {
+        try { await processSummary(activity); }
+        catch (err) { console.error("[Garmin] Summary failed:", err.message); }
+    }
+    for (const file of body.activityFiles || []) {
+        try { await processFile(file); }
+        catch (err) { console.error("[Garmin] FIT processing failed:", err.message); }
+    }
+}
+
 // ============================================================
-// 1. GARMIN WEBHOOK VERIFICATION (GET)
+// 1. GARMIN WEBHOOK VERIFICATION (GET), harmless, kept for manual checks
 // ============================================================
 const verifyGarminWebhook = (req, res) => {
     const challenge = req.query.challenge;
@@ -100,148 +308,18 @@ const verifyGarminWebhook = (req, res) => {
 };
 
 // ============================================================
-// 2. HANDLE INCOMING GARMIN ACTIVITY PUSH (POST)
+// 2. INCOMING GARMIN PUSH (POST): ANSWER 200 FIRST, WORK AFTER
 // ============================================================
-const handleGarminWebhook = async (req, res) => {
-    let tempFolder = null;
+const handleGarminWebhook = (req, res) => {
+    const body = req.body || {};
+    const raw = JSON.stringify(body);
+    console.log(`[Garmin] Webhook received. keys=${Object.keys(body).join(",")} bytes=${raw.length}`);
+    console.log(raw.slice(0, 4000));
 
-    try {
-        const body = req.body;
-        console.log("Received Garmin webhook payload:", JSON.stringify(body, null, 2));
+    // Garmin retries / disables endpoints that don't answer 200 quickly. Never do the heavy work before this line.
+    res.status(200).json({ status: "received" });
 
-        const activities = body?.activities || [];
-
-        if (activities.length === 0) {
-            return res.status(200).json({ status: "received", processed: 0 });
-        }
-
-        let processedCount = 0;
-
-        for (const activity of activities) {
-            const garminId = activity.userId;
-            const activityId = activity.activityId || activity.summaryId;
-
-            if (!garminId || !activityId) continue;
-
-            // Find user in database by Garmin ID
-            const userResult = await pool.query(
-                `SELECT id, access_token FROM users WHERE garmin_id = $1`,
-                [garminId]
-            );
-
-            if (userResult.rows.length === 0) {
-                console.warn(`User with Garmin ID ${garminId} not found in database.`);
-                continue;
-            }
-
-            const user = userResult.rows[0];
-            const userID = user.id;
-            const accessToken = user.access_token;
-
-            const activityDate = dateOrNull(
-                activity.startTimeInSeconds ? activity.startTimeInSeconds * 1000 : activity.startTimeLocal
-            );
-            const distance = numberOrNull(activity.distanceInMeters);
-            const movingTime = numberOrNull(activity.durationInSeconds);
-            const elapsedTime = numberOrNull(activity.elapsedDurationInSeconds);
-            const averageSpeed = numberOrNull(activity.averageSpeedInMetersPerSecond);
-            const averagePower = numberOrNull(activity.averageWatts);
-            const averageHR = numberOrNull(activity.averageHeartRateInBeatsPerMinute);
-            const maxHR = numberOrNull(activity.maxHeartRateInBeatsPerMinute);
-            const averageCadence = numberOrNull(activity.averageCadenceInRpm);
-            const elevationGain = numberOrNull(activity.elevationGainInMeters);
-            const elevationLoss = numberOrNull(activity.elevationLossInMeters);
-
-            // Upsert into activities table
-            await pool.query(
-                `
-                INSERT INTO activities
-                (
-                    user_id,
-                    intervals_activity_id,
-                    activity_date,
-                    distance,
-                    moving_time,
-                    elapsed_time,
-                    average_speed,
-                    average_power,
-                    average_hr,
-                    max_hr,
-                    average_cadence,
-                    elevation_gain,
-                    elevation_loss,
-                    fit_available,
-                    raw_data
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (user_id, intervals_activity_id)
-                DO UPDATE SET
-                    activity_date   = EXCLUDED.activity_date,
-                    distance        = EXCLUDED.distance,
-                    moving_time     = EXCLUDED.moving_time,
-                    elapsed_time    = EXCLUDED.elapsed_time,
-                    average_speed   = EXCLUDED.average_speed,
-                    average_power   = EXCLUDED.power,
-                    average_hr      = EXCLUDED.average_hr,
-                    max_hr          = EXCLUDED.max_hr,
-                    average_cadence = EXCLUDED.average_cadence,
-                    elevation_gain  = EXCLUDED.elevation_gain,
-                    elevation_loss  = EXCLUDED.elevation_loss,
-                    fit_available   = EXCLUDED.fit_available,
-                    raw_data        = EXCLUDED.raw_data
-                `,
-                [
-                    userID,
-                    String(activityId),
-                    activityDate,
-                    distance,
-                    movingTime,
-                    elapsedTime,
-                    averageSpeed,
-                    averagePower,
-                    averageHR,
-                    maxHR,
-                    averageCadence,
-                    elevationGain,
-                    elevationLoss,
-                    !!activity.callbackURL,
-                    JSON.stringify(activity)
-                ]
-            );
-
-            processedCount++;
-
-            // Download FIT file if callback URL is provided
-            if (activity.callbackURL) {
-                tempFolder = path.join(process.cwd(), "temp", String(userID));
-                await fs.mkdir(tempFolder, { recursive: true });
-                const fitPath = path.join(tempFolder, `${activityId}.fit`);
-
-                try {
-                    await downloadGarminFitFile(activity.callbackURL, accessToken, fitPath);
-                    // Run ML pipeline for this user
-                    await runMlPipeline(tempFolder, userID);
-                } catch (err) {
-                    console.error(`Failed to download FIT or run ML pipeline for activity ${activityId}:`, err.message);
-                }
-            }
-        }
-
-        // Always return 200 immediately so Garmin doesn't retry webhook delivery
-        return res.status(200).json({ status: "success", processed: processedCount });
-
-    } catch (err) {
-        console.error("Garmin webhook processing failed:", err);
-        return res.status(200).json({ status: "error", message: err.message });
-    } finally {
-        if (tempFolder) {
-            try {
-                await fs.rm(tempFolder, { recursive: true, force: true });
-            } catch (cleanupErr) {
-                console.error("Cleanup error:", cleanupErr.message);
-            }
-        }
-    }
+    enqueue(() => processPayload(body));
 };
 
 export {

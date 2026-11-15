@@ -32,7 +32,6 @@ from datetime import timedelta
 import requests
 
 import styles
-import about
 import privacy
 import contact
 import home
@@ -103,7 +102,6 @@ PAGES = [
     "Setup Form",
     "Sync",
     "Adaptive Cycling Coach",
-    "About",
     "Privacy Policy",
     "Contact"
 ]
@@ -113,7 +111,6 @@ NAV_LABELS = {
     "Sync": "Activity Synchronization",
     "Setup Form": "Sensor Calibration",
     "Adaptive Cycling Coach": "Coach & Telemetry",
-    "About": "System Architecture",
     "Privacy Policy": "Privacy Protocol",
     "Contact": "Dispatch & Support"
 }
@@ -135,7 +132,7 @@ if route_param:
     if route_clean in ["privacy", "privacypolicy"]:
         st.session_state["selected_page"] = "Privacy Policy"
 
-if "selected_page" not in st.session_state:
+if "selected_page" not in st.session_state or st.session_state["selected_page"] not in PAGES:
     st.session_state["selected_page"] = "Home"
 
 with st.sidebar:
@@ -636,9 +633,6 @@ elif selected_page == "Adaptive Cycling Coach":
 # ============================================================
 # OTHER PAGES ROUTING
 # ============================================================
-
-elif selected_page == "About":
-    about.show_about_page()
 
 elif selected_page == "Privacy Policy":
     privacy.show_privacy_page()

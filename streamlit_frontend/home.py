@@ -66,24 +66,24 @@ def show_homepage():
 
     with step_col1:
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 165px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
                     STAGE 01 // SENSOR CALIBRATION
                 </div>
-                <span class="tech-tag">CALIBRATION</span>
+                <span class="tech-tag">ONE-TIME SETUP</span>
             </div>
             <div style="font-weight: 600; color: #F8FAFC; font-size: 1rem; margin-bottom: 6px;">
                 Hardware & Timeline Setup
             </div>
             <p style="color: #7A889B; font-size: 0.83rem; line-height: 1.5; margin: 0;">
-                Navigate to <strong>Sensor Calibration</strong> in the sidebar. Specify whether your bicycle is equipped with a strain gauge power meter and set the installation month and year. This allows the machine learning pipeline to distinguish true recorded wattage from estimated power.
+                Navigate to <strong>Sensor Calibration</strong> in the sidebar. Specify whether your bicycle is equipped with a strain gauge power meter and set the installation month and year. This allows the machine learning pipeline to distinguish true recorded wattage from estimated power. <span style="color: #94A3B8; font-weight: 500;">Required only once during initial platform onboarding.</span>
             </p>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 165px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
                     STAGE 03 // REAL-TIME WEBHOOK PUSH
@@ -101,24 +101,24 @@ def show_homepage():
 
     with step_col2:
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 165px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
                     STAGE 02 // HISTORICAL ARCHIVE IMPORT
                 </div>
-                <span class="tech-tag">INGESTION</span>
+                <span class="tech-tag">ONE-TIME SETUP</span>
             </div>
             <div style="font-weight: 600; color: #F8FAFC; font-size: 1rem; margin-bottom: 6px;">
                 Garmin OAuth & Archive Ingestion
             </div>
             <p style="color: #7A889B; font-size: 0.83rem; line-height: 1.5; margin: 0;">
-                Navigate to <strong>Activity Synchronization</strong>. Authorize with Garmin Connect via OAuth2 PKCE, then upload your exported Garmin data archive (<code>.zip</code> package containing raw <code>.fit</code> files) to train the baseline Random Forest models.
+                Navigate to <strong>Activity Synchronization</strong>. Authorize with Garmin Connect via OAuth2 PKCE, then upload your exported Garmin data archive (<code>.zip</code> package containing raw <code>.fit</code> files) to train the baseline Random Forest models. <span style="color: #94A3B8; font-weight: 500;">Required only once during initial platform onboarding.</span>
             </p>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("""
-        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 160px;">
+        <div class="telemetry-panel" style="margin-bottom: 16px; min-height: 165px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #FF4B00; text-transform: uppercase; font-weight: 600;">
                     STAGE 04 // COACH TERMINAL

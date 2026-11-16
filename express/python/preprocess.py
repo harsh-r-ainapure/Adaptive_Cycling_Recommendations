@@ -77,15 +77,17 @@ def process_summaries(dir_path):
                             else:
                                 continue
 
-                            distance = safe_float(act.get("distance"))
-                            moving_time = safe_float(act.get("movingDuration", act.get("duration", act.get("movingTime"))))
-                            elapsed_time = safe_float(act.get("elapsedDuration", act.get("elapsedTime", moving_time)))
-                            avg_speed = safe_float(act.get("avgSpeed", act.get("averageSpeed")))
+                            # Garmin export units: distance=cm, elevationGain=cm, durations=ms,
+                            # avgSpeed=(m/s)/10. Convert to km, m, seconds, m/s.
+                            distance = safe_float(act.get("distance")) / 100000.0          # cm -> km
+                            moving_time = safe_float(act.get("movingDuration", act.get("duration", act.get("movingTime")))) / 1000.0   # ms -> s
+                            elapsed_time = safe_float(act.get("elapsedDuration", act.get("elapsedTime"))) / 1000.0 if act.get("elapsedDuration", act.get("elapsedTime")) is not None else moving_time
+                            avg_speed = safe_float(act.get("avgSpeed", act.get("averageSpeed"))) * 10.0   # -> m/s
                             avg_hr = safe_float(act.get("avgHr", act.get("averageHR")))
                             max_hr = safe_float(act.get("maxHr", act.get("maxHR")))
                             avg_cadence = safe_float(act.get("avgBikeCadence", act.get("averageBikingCadence", act.get("averageCadence"))))
                             avg_power = safe_float(act.get("avgPower", act.get("averagePower")))
-                            elevation_gain = safe_float(act.get("elevationGain"))
+                            elevation_gain = safe_float(act.get("elevationGain")) / 100.0   # cm -> m
 
                             # Avoid duplicates even if intervals_activity_id has no UNIQUE constraint
                             insert_query = """
